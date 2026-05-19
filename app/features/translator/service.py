@@ -11,8 +11,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from aiohttp import web
-
 from app.features.translator.constants import (
     DOWNLOAD_MODE_DOWNLOAD,
     SUBTITLE_MODE_NONE,
@@ -26,9 +24,11 @@ from app.library.Services import Services
 from app.library.Singleton import Singleton
 
 if TYPE_CHECKING:
-    from app.library.ItemDTO import ItemDTO
+    from aiohttp import web
+
     from app.library.config import Config
     from app.library.downloads import Download, DownloadQueue
+    from app.library.ItemDTO import ItemDTO
 
 LOG: logging.Logger = logging.getLogger("translator.service")
 
@@ -45,7 +45,7 @@ class TranslatorService(metaclass=Singleton):
         self._notify = EventBus.get_instance()
 
     @staticmethod
-    def get_instance() -> "TranslatorService":
+    def get_instance() -> TranslatorService:
         return TranslatorService()
 
     def attach(self, app: web.Application) -> None:
@@ -104,7 +104,8 @@ class TranslatorService(metaclass=Singleton):
         queue = self._require_queue()
         config = self._require_config()
         if not item_id:
-            raise ValueError("item_id is required")
+            message = "item_id is required"
+            raise ValueError(message)
 
         item = await queue.done.get_by_id(item_id)
         if not item:
@@ -114,9 +115,11 @@ class TranslatorService(metaclass=Singleton):
         media_file = info.get_file()
         requested_subtitle_mode = normalize_subtitle_mode(subtitle_mode, SUBTITLE_MODE_TRANSLATE)
         if requested_subtitle_mode == SUBTITLE_MODE_NONE:
-            raise ValueError("subtitle_mode must not be none when requesting subtitle generation.")
+            message = "subtitle_mode must not be none when requesting subtitle generation."
+            raise ValueError(message)
         if not media_file or not media_file.exists():
-            raise ValueError("item has no downloaded file.")
+            message = "item has no downloaded file."
+            raise ValueError(message)
 
         if item_id in self._jobs and not self._jobs[item_id].done():
             return {
@@ -173,12 +176,12 @@ class TranslatorService(metaclass=Singleton):
         try:
             item = await queue.done.get_by_id(item_id)
             if not item:
-                raise KeyError(item_id)
+                self._raise_missing_item(item_id)
 
             info = item.info
             media_file = info.get_file()
             if not media_file or not media_file.exists():
-                raise ValueError("item has no downloaded file.")
+                self._raise_missing_media_file()
 
             workspace = self._workspace_for_item(item_id)
             input_dir, output_dir, metadata_path = await self._prepare_workspace(info, media_file, workspace, payload)
@@ -244,7 +247,8 @@ class TranslatorService(metaclass=Singleton):
         await asyncio.gather(consume(process.stdout, "stdout"), consume(process.stderr, "stderr"))
         code = await process.wait()
         if code != 0:
-            raise RuntimeError(f"translator exited with code {code}")
+            message = f"translator exited with code {code}"
+            raise RuntimeError(message)
 
     async def _prepare_workspace(
         self,
@@ -306,7 +310,8 @@ class TranslatorService(metaclass=Singleton):
         config = self._require_config()
         project_path = Path(config.translator_project_path)
         if not project_path.exists():
-            raise ValueError(f"translator project path does not exist: {project_path}")
+            message = f"translator project path does not exist: {project_path}"
+            raise ValueError(message)
         cmd = [
             config.translator_npm_exe,
             "run",
@@ -336,9 +341,11 @@ class TranslatorService(metaclass=Singleton):
         elif subtitle_mode != "transcribe" and config.translator_model_path:
             cmd.extend(["--model", config.translator_model_path])
         elif subtitle_mode != "transcribe":
-            raise ValueError(
-                "translator model/server is not configured. Set YTP_TRANSLATOR_SERVER_URL or YTP_TRANSLATOR_MODEL_PATH."
+            message = (
+                "translator model/server is not configured. Set YTP_TRANSLATOR_SERVER_URL "
+                "or YTP_TRANSLATOR_MODEL_PATH."
             )
+            raise ValueError(message)
 
         if subtitle_mode != "transcribe" and not config.translator_server_url:
             cmd.extend(
@@ -506,6 +513,15 @@ class TranslatorService(metaclass=Singleton):
         await queue.done.put(item, no_notify=True)
         self._notify.emit(Events.ITEM_UPDATED, data=item.info)
 
+    @staticmethod
+    def _raise_missing_item(item_id: str) -> None:
+        raise KeyError(item_id)
+
+    @staticmethod
+    def _raise_missing_media_file() -> None:
+        message = "item has no downloaded file."
+        raise ValueError(message)
+
     def _workspace_for_item(self, item_id: str) -> Path:
         return Path(self._require_config().translator_workspace) / item_id
 
@@ -547,10 +563,12 @@ class TranslatorService(metaclass=Singleton):
 
     def _require_queue(self) -> DownloadQueue:
         if self._queue is None:
-            raise RuntimeError("translator queue is not initialized")
+            message = "translator queue is not initialized"
+            raise RuntimeError(message)
         return self._queue
 
     def _require_config(self) -> Config:
         if self._config is None:
-            raise RuntimeError("translator config is not initialized")
+            message = "translator config is not initialized"
+            raise RuntimeError(message)
         return self._config

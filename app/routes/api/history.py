@@ -893,13 +893,13 @@ async def item_subtitle_generate(request: Request, queue: DownloadQueue) -> Resp
     try:
         result = await TranslatorService.get_instance().start_for_history_item(
             id,
-            source='api',
-            force=bool(post.get('force', False)),
-            lang=str(post.get('lang') or '') or None,
-            mode=str(post.get('mode') or '') or None,
-            asr_mode=str(post.get('asr_mode') or '') or None,
-            metadata_file=str(post.get('metadata_file') or '') or None,
-            subtitle_mode=str(post.get('subtitle_mode') or '') or None,
+            source="api",
+            force=bool(post.get("force", False)),
+            lang=str(post.get("lang") or "") or None,
+            mode=str(post.get("mode") or "") or None,
+            asr_mode=str(post.get("asr_mode") or "") or None,
+            metadata_file=str(post.get("metadata_file") or "") or None,
+            subtitle_mode=str(post.get("subtitle_mode") or "") or None,
         )
         return web.json_response(data=result, status=web.HTTPOk.status_code)
     except ValueError as e:
