@@ -1,4 +1,4 @@
-FROM node:lts-alpine AS node_builder
+FROM node:lts-alpine AS ui_builder
 
 WORKDIR /app
 COPY ui ./
@@ -9,7 +9,39 @@ RUN if [ ! -f "/app/exported/index.html" ]; then \
   bun run generate; \
   else echo "Skipping UI build, already built."; fi
 
-FROM python:3.13-bookworm AS python_builder
+FROM node:20-bookworm AS translator_node_builder
+
+WORKDIR /build/translator
+COPY translator/package.json translator/package-lock.json ./
+RUN npm ci
+COPY translator/ ./
+RUN npm run build
+
+FROM rocm/dev-ubuntu-24.04:7.2.1-complete AS translator_asr_builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV UV_INSTALL_DIR=/usr/local/bin
+ENV UV_CACHE_DIR=/root/.cache/uv
+
+COPY --from=astral/uv:latest /uv /usr/local/bin/uv
+
+RUN apt-get update && \
+  apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    ffmpeg \
+    git \
+    libsndfile1 \
+    python3.12 \
+    python3.12-venv \
+    unzip \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build/translator/asr
+COPY translator/asr/ ./
+RUN chmod +x ./setup.sh && ./setup.sh
+
+FROM python:3.13-bookworm AS app_python_builder
 
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
@@ -31,55 +63,82 @@ RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache \
   uv venv --system-site-packages --relocatable ./python && \
   VIRTUAL_ENV=/opt/python uv sync --no-dev --link-mode=copy --active
 
-FROM python:3.13-slim
+FROM rocm/dev-ubuntu-24.04:7.2.1-complete
 
 ARG TZ=UTC
 ARG USER_ID=1000
+ARG DEBIAN_FRONTEND=noninteractive
+
 ENV IN_CONTAINER=1
 ENV UMASK=0002
 ENV YTP_CONFIG_PATH=/config
 ENV YTP_TEMP_PATH=/tmp
 ENV YTP_DOWNLOAD_PATH=/downloads
 ENV YTP_PORT=8081
+ENV YTP_TRANSLATOR_PROJECT_PATH=/app/translator
+ENV YTP_TRANSLATOR_PYTHON_EXE=/app/translator/asr/.venv/bin/python
+ENV YTP_TRANSLATOR_UV_EXE=/usr/local/bin/uv
 ENV XDG_CONFIG_HOME=/config
 ENV XDG_CACHE_HOME=/tmp
 ENV PYDEVD_DISABLE_FILE_VALIDATION=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONFAULTHANDLER=1
-
-ARG DEBIAN_FRONTEND=noninteractive
-
-RUN sed -i -E '/^Suites:[[:space:]]*trixie[[:space:]]+trixie-updates$/ {n; s/^(Components:[[:space:]]*)main([[:space:]]*|$)/\1main contrib non-free\2/}' /etc/apt/sources.list.d/debian.sources && \
-  mkdir /config /downloads && ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && echo ${TZ} > /etc/timezone && \
-  apt-get update && \
-  ARCH="$(dpkg --print-architecture)" && \
-  EXTRA_PACKAGES="" && \
-  if [ "$ARCH" = "amd64" ]; then EXTRA_PACKAGES="intel-media-va-driver-non-free i965-va-driver libmfx-gen1.2"; fi && \
-  apt-get install -y --no-install-recommends locales procps \
-  bash mkvtoolnix patch aria2 curl ca-certificates xz-utils git sqlite3 tzdata file libmagic1 vainfo ${EXTRA_PACKAGES} \
-  && useradd -u ${USER_ID:-1000} -U -d /app -s /bin/bash app && \
-  sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
-  dpkg-reconfigure --frontend=noninteractive locales && \
-  update-locale LANG=en_US.UTF-8 \
-  mkdir -p /opt/bin && rm -rf /var/lib/apt/lists/*
-
-COPY entrypoint.sh /
-COPY --chown=app:app yt-dlp /opt/bin/yt-dlp
-COPY --chown=app:app ./app /app/app
-COPY --chown=app:app --from=node_builder /app/exported /app/ui/exported
-COPY --chown=app:app --from=python_builder /opt/python /opt/python
-COPY --from=ghcr.io/arabcoders/alpine-mp4box /usr/bin/mp4box /usr/bin/mp4box
-COPY --from=ghcr.io/arabcoders/jellyfin-ffmpeg /usr/bin/ffmpeg /usr/bin/ffmpeg
-COPY --from=ghcr.io/arabcoders/jellyfin-ffmpeg /usr/bin/ffprobe /usr/bin/ffprobe
-COPY --from=denoland/deno:latest /usr/bin/deno /usr/bin/deno
-COPY --chown=app:app ./healthcheck.sh /usr/local/bin/healthcheck
-
-ENV PATH="/opt/bin:/opt/python/bin:$PATH"
+ENV PATH="/opt/bin:/opt/python/bin:/usr/local/bin:$PATH"
+ENV HOME=/app
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
 ENV LC_ALL=en_US.UTF-8
 
-RUN sed -i 's/\r$//g' /entrypoint.sh && chmod +x /entrypoint.sh && chown -R app:app /config /downloads && \
+COPY --from=astral/uv:latest /uv /usr/local/bin/uv
+COPY --from=translator_node_builder /usr/local/ /usr/local/
+
+RUN install -d -m 0775 -o ${USER_ID} -g 0 /app /config /downloads && \
+  ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && \
+  echo ${TZ} > /etc/timezone && \
+  apt-get update && \
+  apt-get install -y --no-install-recommends \
+    aria2 \
+    bash \
+    ca-certificates \
+    curl \
+    file \
+    git \
+    libmagic1 \
+    libsndfile1 \
+    locales \
+    mkvtoolnix \
+    patch \
+    procps \
+    python3 \
+    python3-venv \
+    sqlite3 \
+    tzdata \
+    vainfo \
+    xz-utils \
+  && sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
+  && dpkg-reconfigure --frontend=noninteractive locales \
+  && update-locale LANG=en_US.UTF-8 \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY entrypoint.sh /
+COPY --chown=${USER_ID}:0 yt-dlp /opt/bin/yt-dlp
+COPY --chown=${USER_ID}:0 ./app /app/app
+COPY --chown=${USER_ID}:0 ./translator /app/translator
+COPY --chown=${USER_ID}:0 --from=ui_builder /app/exported /app/ui/exported
+COPY --chown=${USER_ID}:0 --from=app_python_builder /opt/python /opt/python
+COPY --chown=${USER_ID}:0 --from=translator_node_builder /build/translator/node_modules /app/translator/node_modules
+COPY --chown=${USER_ID}:0 --from=translator_node_builder /build/translator/dist /app/translator/dist
+# The qwen_env venv is deduplicated in setup.sh: its heavy ROCm packages are symlinked
+# back to the main ASR env so exporting the image does not materialize a second Torch stack.
+COPY --chown=${USER_ID}:0 --from=translator_asr_builder /build/translator/asr/.venv /app/translator/asr/.venv
+COPY --chown=${USER_ID}:0 --from=translator_asr_builder /build/translator/asr/qwen_env/.venv /app/translator/asr/qwen_env/.venv
+COPY --from=ghcr.io/arabcoders/alpine-mp4box /usr/bin/mp4box /usr/bin/mp4box
+COPY --from=ghcr.io/arabcoders/jellyfin-ffmpeg /usr/bin/ffmpeg /usr/bin/ffmpeg
+COPY --from=ghcr.io/arabcoders/jellyfin-ffmpeg /usr/bin/ffprobe /usr/bin/ffprobe
+COPY --from=denoland/deno:latest /usr/bin/deno /usr/bin/deno
+COPY --chown=${USER_ID}:0 ./healthcheck.sh /usr/local/bin/healthcheck
+
+RUN sed -i 's/\r$//g' /entrypoint.sh && chmod +x /entrypoint.sh && \
   chmod +x /usr/local/bin/healthcheck /usr/bin/mp4box /usr/bin/ffmpeg /usr/bin/ffprobe /usr/bin/deno /opt/bin/yt-dlp
 
 VOLUME /config
@@ -87,7 +146,7 @@ VOLUME /downloads
 
 EXPOSE 8081
 
-USER app
+USER ${USER_ID}
 
 WORKDIR /tmp
 

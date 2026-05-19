@@ -11,3 +11,12 @@ ui/dist
 **/.env
 ./var/*
 !./var/.gitignore
+translator/node_modules/
+translator/dist/
+translator/asr/.venv/
+translator/asr/qwen_env/.venv/
+translator/asr/rocm_wheels/
+translator/asr/rocm-python-wheels-Linux.zip
+translator/asr/rocm-python-wheels-Windows.zip
+translator/asr/__pycache__/
+integration-test/

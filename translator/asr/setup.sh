@@ -61,7 +61,49 @@ echo ""
 echo "Syncing isolated Qwen ASR dependencies..."
 ( cd qwen_env && uv sync )
 
-# 5. Verification
+# 5. Replace duplicated heavy ROCm runtime packages in qwen_env with symlinks to the
+#    main ASR env so the runtime image does not carry two full Torch stacks.
+echo ""
+echo "Deduplicating shared ROCm packages between main ASR env and qwen_env..."
+SCRIPT_DIR="$SCRIPT_DIR" python3 <<PY
+import os
+import shutil
+from pathlib import Path
+
+root = Path(os.environ["SCRIPT_DIR"])
+main_site = next((root / ".venv" / "lib").glob("python*/site-packages"))
+qwen_site = next((root / "qwen_env" / ".venv" / "lib").glob("python*/site-packages"))
+
+patterns = [
+    "torch",
+    "torch-*.dist-info",
+    "torchaudio",
+    "torchaudio-*.dist-info",
+    "torchvision",
+    "torchvision-*.dist-info",
+    "triton",
+    "triton-*.dist-info",
+]
+
+shared_names = []
+for pattern in patterns:
+    shared_names.extend(path.name for path in main_site.glob(pattern))
+
+for name in sorted(set(shared_names)):
+    src = main_site / name
+    dst = qwen_site / name
+    if not src.exists():
+        continue
+    if dst.is_symlink() or dst.is_file():
+        dst.unlink()
+    elif dst.is_dir():
+        shutil.rmtree(dst)
+    rel = os.path.relpath(src, dst.parent)
+    os.symlink(rel, dst)
+    print(f"linked {dst} -> {rel}")
+PY
+
+# 6. Verification
 echo ""
 echo "Verifying installation..."
 uv run python <<'PY'

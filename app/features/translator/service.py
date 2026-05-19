@@ -125,7 +125,7 @@ class TranslatorService(metaclass=Singleton):
                 "message": f"Subtitle generation already running for {info.title}.",
             }
 
-        if not force and self._has_existing_sidecars(media_file):
+        if not force and self._has_existing_sidecars(media_file, requested_subtitle_mode):
             await self._mark_completed(info, media_file, message="Subtitle sidecars already exist.")
             return {
                 "status": "already_generated",
@@ -134,7 +134,7 @@ class TranslatorService(metaclass=Singleton):
             }
 
         workspace_output = self._workspace_for_item(item_id) / "output"
-        if not force and self._has_output_sidecars(workspace_output, media_file.stem):
+        if not force and self._has_output_sidecars(workspace_output, media_file.stem, requested_subtitle_mode):
             copied = await self._copy_sidecars(media_file, workspace_output)
             await self._mark_completed(
                 info,
@@ -509,19 +509,20 @@ class TranslatorService(metaclass=Singleton):
     def _workspace_for_item(self, item_id: str) -> Path:
         return Path(self._require_config().translator_workspace) / item_id
 
-    def _has_existing_sidecars(self, media_file: Path) -> bool:
-        return any((media_file.with_name(f"{media_file.stem}{suffix}")).exists() for suffix in (".lrc", ".vtt"))
+    def _required_sidecar_suffixes(self, subtitle_mode: str) -> tuple[str, ...]:
+        normalized_mode = normalize_subtitle_mode(subtitle_mode, SUBTITLE_MODE_TRANSLATE)
+        if normalized_mode == "transcribe":
+            return (".lrc", ".vtt", ".transcription.json")
+        return (".lrc", ".vtt", ".translation.json", ".windows.json")
 
-    def _has_output_sidecars(self, output_dir: Path, stem: str) -> bool:
-        suffixes = (
-            ".lrc",
-            ".vtt",
-            ".translation.json",
-            ".transcription.json",
-            ".windows.json",
-            ".surgical.json",
+    def _has_existing_sidecars(self, media_file: Path, subtitle_mode: str) -> bool:
+        return all(
+            (media_file.with_name(f"{media_file.stem}{suffix}")).exists()
+            for suffix in self._required_sidecar_suffixes(subtitle_mode)
         )
-        return any((output_dir / f"{stem}{suffix}").exists() for suffix in suffixes)
+
+    def _has_output_sidecars(self, output_dir: Path, stem: str, subtitle_mode: str) -> bool:
+        return all((output_dir / f"{stem}{suffix}").exists() for suffix in self._required_sidecar_suffixes(subtitle_mode))
 
     def _is_interesting_line(self, line: str) -> bool:
         if not line or _SERVER_NOISE_RE.match(line):

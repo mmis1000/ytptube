@@ -46,30 +46,49 @@ Please read the [FAQ](FAQ.md) for more information.
 
 ## Run using docker command
 
+Build the ROCm-enabled image locally first:
+
 ```bash
-mkdir -p ./{config,downloads/files,downloads/tmp} && docker run -itd --rm --user "${UID}:${UID}" --name ytptube \
--e YTP_TEMP_PATH=/downloads/tmp -e YTP_DOWNLOAD_PATH=/downloads/files \
--p 8081:8081 -v ./config:/config:rw -v ./downloads:/downloads:rw \
-ghcr.io/arabcoders/ytptube:latest
+docker build -t ytptube:rocm .
+```
+
+Then run it with the ROCm device mappings required by AMD GPUs:
+
+```bash
+mkdir -p ./{config,downloads/files,downloads/tmp} && docker run -itd --rm   --user "${UID}:${UID}"   --name ytptube   --device /dev/kfd   --device /dev/dri   --group-add video   --security-opt seccomp=unconfined   --ipc=host   -e YTP_TEMP_PATH=/downloads/tmp   -e YTP_DOWNLOAD_PATH=/downloads/files   -p 8081:8081   -v ./config:/config:rw   -v ./downloads:/downloads:rw   ytptube:rocm
 ```
 
 Then you can access the WebUI at `http://localhost:8081`.
 
+> [!IMPORTANT]
+> The ROCm container needs `/dev/kfd`, `/dev/dri`, and the `video` group mapping from the host. Without those, GPU-backed ASR / subtitle jobs will not work.
+
 > [!NOTE]
-> If you are using `podman` instead of `docker`, you can use the same command, but you need to change the user to `0:0`
-> it will appears to be running as root, but it will run as the user who started the container.
+> If you are using `podman` instead of `docker`, you can use the same command, but you need to change the user to `0:0`.
+> It will appear to be running as root, but it will run as the user who started the container.
 
 ## Using compose file
 
-The following is an example of a `compose.yaml` file that can be used to run YTPTube.
+The following is an example of a `compose.yaml` file that can be used to run the ROCm-enabled YTPTube image.
 
 ```yaml
 services:
   ytptube:
     user: "${UID:-1000}:${UID:-1000}" # change this to your user id and group id.
-    image: ghcr.io/arabcoders/ytptube:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ytptube:rocm
     container_name: ytptube
     restart: unless-stopped
+    security_opt:
+      - seccomp=unconfined
+    ipc: host
+    group_add:
+      - video
+    devices:
+      - /dev/kfd
+      - /dev/dri
     environment:
       - YTP_TEMP_PATH=/downloads/tmp
       - YTP_DOWNLOAD_PATH=/downloads/files
@@ -84,14 +103,14 @@ services:
 > Make sure to change the `user` line to match your user id and group id.
 
 ```bash
-mkdir -p ./{config,downloads/files,downloads/tmp} && docker compose -f compose.yaml up -d
+mkdir -p ./{config,downloads/files,downloads/tmp} && docker compose -f compose.yaml up -d --build
 ```
 
 Then you can access the WebUI at `http://localhost:8081`.
 
 > [!NOTE]
-> you can use podman-compose instead of docker-compose, as it supports the same syntax. However, you should change the 
-> user to `0:0` it will appears to be running as root, but it will run as the user who started the container.
+> You can use podman-compose instead of docker compose, as it supports the same syntax. However, you should change the
+> user to `0:0`; it will appear to be running as root, but it will run as the user who started the container.
 
 ## Unraid
 

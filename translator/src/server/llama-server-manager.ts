@@ -21,6 +21,7 @@ export class LlamaServerManager {
   private isStopping = false;
   private restartPromise: Promise<void> | null = null;
   private label: string;
+  private usingExistingServer = false;
 
   constructor(private config: ServerConfig, label = "LlamaServer") {
     this.baseUrl = config.serverUrl ?? `http://127.0.0.1:${config.serverPort}`;
@@ -41,6 +42,12 @@ export class LlamaServerManager {
     if (this.process) return;
 
     this.isStopping = false;
+
+    if (await this.isServerResponsive()) {
+      this.usingExistingServer = true;
+      console.log(`[${this.label}] Reusing existing server at ${this.baseUrl}`);
+      return;
+    }
 
     const args = [
       ...(this.config.hfRepo
@@ -132,9 +139,25 @@ export class LlamaServerManager {
     });
   }
 
+  private async isServerResponsive(): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1500);
+      const response = await fetch(`${this.baseUrl}/health`, { signal: controller.signal });
+      clearTimeout(timeout);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
   async stop(): Promise<void> {
     if (this.isExternal) return;
     this.isStopping = true;
+    if (this.usingExistingServer) {
+      this.usingExistingServer = false;
+      return;
+    }
     const proc = this.process;
     if (!proc) return;
 
@@ -163,6 +186,7 @@ export class LlamaServerManager {
     if (this.isExternal) return;
     console.warn(`\n[${this.label}] FORCE RESTART INITIATED`);
     this.isStopping = true;
+    this.usingExistingServer = false;
     if (this.process) {
       try { this.process.kill("SIGKILL"); } catch {}
       this.process = null;
