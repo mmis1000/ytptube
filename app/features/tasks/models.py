@@ -24,6 +24,8 @@ class TaskModel(Base):
     timer: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     template: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
     cli: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    download_mode: Mapped[str] = mapped_column(String(64), nullable=False, default="download")
+    subtitle_mode: Mapped[str] = mapped_column(String(64), nullable=False, default="none")
     auto_start: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     handler_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

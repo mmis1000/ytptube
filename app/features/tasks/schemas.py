@@ -6,6 +6,12 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.features.core.schemas import Pagination
+from app.features.translator.constants import (
+    DOWNLOAD_MODE_DOWNLOAD,
+    SUBTITLE_MODE_NONE,
+    normalize_download_mode,
+    normalize_subtitle_mode,
+)
 
 
 class Task(BaseModel):
@@ -19,6 +25,8 @@ class Task(BaseModel):
     timer: str = ""
     template: str = ""
     cli: str = ""
+    download_mode: str = DOWNLOAD_MODE_DOWNLOAD
+    subtitle_mode: str = SUBTITLE_MODE_NONE
     auto_start: bool = True
     handler_enabled: bool = True
     enabled: bool = True
@@ -108,6 +116,16 @@ class Task(BaseModel):
 
         return value
 
+    @field_validator("download_mode", mode="before")
+    @classmethod
+    def _validate_download_mode(cls, value: Any) -> str:
+        return normalize_download_mode(value, DOWNLOAD_MODE_DOWNLOAD)
+
+    @field_validator("subtitle_mode", mode="before")
+    @classmethod
+    def _validate_subtitle_mode(cls, value: Any) -> str:
+        return normalize_subtitle_mode(value, SUBTITLE_MODE_NONE)
+
 
 class TaskPatch(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -119,9 +137,25 @@ class TaskPatch(BaseModel):
     timer: str | None = None
     template: str | None = None
     cli: str | None = None
+    download_mode: str | None = None
+    subtitle_mode: str | None = None
     auto_start: bool | None = None
     handler_enabled: bool | None = None
     enabled: bool | None = None
+
+    @field_validator("download_mode", mode="before")
+    @classmethod
+    def _validate_download_mode(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        return normalize_download_mode(value, DOWNLOAD_MODE_DOWNLOAD)
+
+    @field_validator("subtitle_mode", mode="before")
+    @classmethod
+    def _validate_subtitle_mode(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        return normalize_subtitle_mode(value, SUBTITLE_MODE_NONE)
 
 
 class TaskList(BaseModel):

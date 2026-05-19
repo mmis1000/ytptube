@@ -20,6 +20,7 @@ import {  repairTranscription,
 } from "./pipeline/asr-repairer.js";
 import { 
   writeTranscription, 
+  writeTranscriptSubtitles,
   writeTranslation, 
   writeMetadata, 
   writeWindowResults, 
@@ -71,6 +72,7 @@ Translation server:
 Translation:
   --lang <zh-tw|zh-cn>     Target language (default: zh-tw)
   --mode <base|echo>       Translation mode (default: echo)
+  --subtitle-mode <translate|transcribe>  Output translated subtitles or source-language transcription subtitles (default: translate)
   --seed <number>          Fixed RNG seed for reproducible output (default: random)
   --debug-log              Write LLM prompt and responses to debug_logs folder
 
@@ -126,6 +128,7 @@ function parseCliArgs(): TranslatorConfig {
       "spec-draft-n-max": { type: "string" },
       lang:              { type: "string" },
       mode:              { type: "string" },
+      "subtitle-mode":   { type: "string" },
       seed:              { type: "string" },
       "debug-log":       { type: "boolean" },
       asr:               { type: "string" },
@@ -168,7 +171,12 @@ function parseCliArgs(): TranslatorConfig {
     process.exit(1);
   }
 
-  if (!values.model && !values["hf-repo"] && !values["server-url"]) {
+  const subtitleMode = values["subtitle-mode"] as "translate" | "transcribe" | undefined;
+  if (subtitleMode && subtitleMode !== "translate" && subtitleMode !== "transcribe") {
+    console.error("Error: --subtitle-mode must be 'translate' or 'transcribe'"); process.exit(1);
+  }
+
+  if ((subtitleMode ?? DEFAULT_CONFIG.subtitleMode) !== "transcribe" && !values.model && !values["hf-repo"] && !values["server-url"]) {
     console.error("Error: --model or --hf-repo is required (unless --server-url is provided)");
     printUsage();
     process.exit(1);
@@ -235,6 +243,7 @@ function parseCliArgs(): TranslatorConfig {
     specDraftNMax: values["spec-draft-n-max"] ? parseInt(values["spec-draft-n-max"] as string, 10) : DEFAULT_CONFIG.specDraftNMax,
     locale: lang ?? DEFAULT_CONFIG.locale,
     mode: mode ?? DEFAULT_CONFIG.mode,
+    subtitleMode: subtitleMode ?? DEFAULT_CONFIG.subtitleMode,
     seed: values.seed !== undefined ? parseInt(values.seed as string, 10) : undefined,
     debugLog: (values["debug-log"] as boolean) ?? DEFAULT_CONFIG.debugLog,
     asrMode: asrMode ?? DEFAULT_CONFIG.asrMode,
@@ -314,6 +323,7 @@ async function main() {
   console.log(`Output:   ${config.outputDir}`);
   console.log(`Language: ${config.locale}`);
   console.log(`Mode:     ${config.mode}`);
+  console.log(`Subtitles:${config.subtitleMode}`);
   console.log(`ASR:      ${config.asrMode}`);
   console.log();
 
@@ -669,6 +679,22 @@ async function main() {
 
   if (readyTracks.length === 0) {
     console.log(`\nNo tracks to translate.`);
+    return;
+  }
+
+  if (config.subtitleMode === "transcribe") {
+    let processed = 0;
+    for (const { track, cleaned } of readyTracks) {
+      console.log(`\n[Subtitle ${processed + 1}/${readyTracks.length}] ${track.relativePath}`);
+      await writeTranscriptSubtitles(config.outputDir, track.relativeDir, track.stem, cleaned);
+      console.log(`  Done: ${cleaned.length} transcription subtitle entries`);
+      processed++;
+    }
+
+    console.log(`\n=== Complete ===`);
+    console.log(`Processed: ${processed}`);
+    console.log(`Skipped:   ${skipped}`);
+    console.log(`Output:    ${config.outputDir}`);
     return;
   }
 

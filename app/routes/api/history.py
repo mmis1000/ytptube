@@ -866,3 +866,49 @@ async def item_nfo_generate(request: Request, queue: DownloadQueue) -> Response:
             data={"error": f"failed to generate NFO: {e!s}"},
             status=web.HTTPInternalServerError.status_code,
         )
+
+
+@route("POST", r"api/history/{id}/subtitle", "history.item.subtitle.generate")
+async def item_subtitle_generate(request: Request, queue: DownloadQueue) -> Response:
+    """Generate subtitle sidecars for an existing history item."""
+    from app.features.translator.service import TranslatorService
+
+    if not (id := request.match_info.get("id")):
+        return web.json_response(data={"error": "id is required."}, status=web.HTTPBadRequest.status_code)
+
+    try:
+        item: Download | None = await queue.done.get_by_id(id)
+        if not item:
+            return web.json_response(data={"error": f"item '{id}' not found."}, status=web.HTTPNotFound.status_code)
+    except KeyError:
+        return web.json_response(data={"error": f"item '{id}' not found."}, status=web.HTTPNotFound.status_code)
+
+    post = {}
+    if request.body_exists:
+        try:
+            post = await request.json() or {}
+        except Exception:
+            post = {}
+
+    try:
+        result = await TranslatorService.get_instance().start_for_history_item(
+            id,
+            source='api',
+            force=bool(post.get('force', False)),
+            lang=str(post.get('lang') or '') or None,
+            mode=str(post.get('mode') or '') or None,
+            asr_mode=str(post.get('asr_mode') or '') or None,
+            metadata_file=str(post.get('metadata_file') or '') or None,
+            subtitle_mode=str(post.get('subtitle_mode') or '') or None,
+        )
+        return web.json_response(data=result, status=web.HTTPOk.status_code)
+    except ValueError as e:
+        return web.json_response(data={"error": str(e)}, status=web.HTTPBadRequest.status_code)
+    except KeyError:
+        return web.json_response(data={"error": f"item '{id}' not found."}, status=web.HTTPNotFound.status_code)
+    except Exception as e:
+        LOG.exception(f"Failed to generate subtitles for item '{id}': {e}")
+        return web.json_response(
+            data={"error": f"failed to generate subtitles: {e!s}"},
+            status=web.HTTPInternalServerError.status_code,
+        )

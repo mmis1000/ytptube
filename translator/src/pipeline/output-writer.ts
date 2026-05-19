@@ -26,6 +26,38 @@ export async function writeTranscription(
   );
 }
 
+export async function writeTranscriptSubtitles(
+  outputDir: string,
+  relativeDir: string,
+  stem: string,
+  segments: TranscriptSegment[],
+): Promise<void> {
+  const dir = path.join(outputDir, relativeDir);
+  await ensureDir(dir);
+
+  const entries: TranslationEntry[] = segments
+    .map((segment, index) => ({
+      ids: [index + 1],
+      text: segment.text?.trim() || null,
+      start: Math.round(segment.start_time * 1000),
+      end: Math.round(segment.end_time * 1000),
+    }))
+    .filter((entry) => entry.text && entry.end >= entry.start);
+
+  await Promise.all([
+    fs.writeFile(
+      path.join(dir, `${stem}.lrc`),
+      toLrc(entries),
+      "utf-8",
+    ),
+    fs.writeFile(
+      path.join(dir, `${stem}.vtt`),
+      toVtt(entries),
+      "utf-8",
+    ),
+  ]);
+}
+
 /** Write the translation output for a single track (JSON + LRC + VTT). */
 export async function writeTranslation(
   outputDir: string,

@@ -811,6 +811,7 @@ const {
   reload,
   remove,
   rename,
+  updatedHandler,
   moveHandler,
 } = useHistoryState();
 
@@ -861,14 +862,17 @@ const paginationInfo = computed(() => ({
 }));
 
 const handleHistoryItemMoved = moveHandler();
+const handleHistoryItemUpdated = updatedHandler();
 
 onMounted(async () => {
-  socketStore.on('item_moved', handleHistoryItemMoved);
-  await load(1, { order: 'DESC', perPage: config.app.default_pagination });
+  socketStore.on("item_moved", handleHistoryItemMoved);
+  socketStore.on("item_updated", handleHistoryItemUpdated);
+  await load(1, { order: "DESC", perPage: config.app.default_pagination });
 });
 
 onBeforeUnmount(() => {
-  socketStore.off('item_moved', handleHistoryItemMoved);
+  socketStore.off("item_moved", handleHistoryItemMoved);
+  socketStore.off("item_updated", handleHistoryItemUpdated);
 });
 
 watch(showFilter, () => {
@@ -1083,8 +1087,14 @@ const itemActionGroups = (item: StoreItem): Array<Array<Record<string, unknown>>
     }
 
     mediaActions.push({
-      label: 'Generate NFO',
-      icon: 'i-lucide-file-code-2',
+      label: "Generate subtitles",
+      icon: "i-lucide-captions",
+      onSelect: () => void generateSubtitles(item),
+    });
+
+    mediaActions.push({
+      label: "Generate NFO",
+      icon: "i-lucide-file-code-2",
       onSelect: () => void generateNfo(item),
     });
 
@@ -1201,108 +1211,172 @@ const clearIncomplete = async (): Promise<void> => {
   await reload({ order: 'DESC', perPage: config.app.default_pagination });
 };
 
+const getSubtitleGeneration = (item: StoreItem) => item.extras?.subtitle_generation;
+
+const getSubtitleStatus = (item: StoreItem): string | null => {
+  const subtitle = getSubtitleGeneration(item);
+  if (!subtitle?.state) {
+    return null;
+  }
+
+  if (subtitle.state === "running") {
+    const current = subtitle.progress?.current;
+    const total = subtitle.progress?.total;
+    const phase = subtitle.phase ? ` (${subtitle.phase})` : "";
+    if (current && total) {
+      return `Subtitle ${current}/${total}${phase}`;
+    }
+    return `Generating subtitles${phase}`;
+  }
+
+  if (subtitle.state === "queued") {
+    return "Subtitle queued";
+  }
+
+  if (subtitle.state === "error") {
+    return "Subtitle error";
+  }
+
+  if (subtitle.state === "finished") {
+    return "Subtitled";
+  }
+
+  return null;
+};
+
 const setIcon = (item: StoreItem): string => {
-  if ('finished' === item.status) {
+  if ("finished" === item.status) {
+    const subtitle = getSubtitleGeneration(item);
+    if (subtitle?.state === "running" || subtitle?.state === "queued") {
+      return "i-lucide-captions";
+    }
+
+    if (subtitle?.state === "error") {
+      return "i-lucide-triangle-alert";
+    }
+
+    if (subtitle?.state === "finished") {
+      return "i-lucide-badge-check";
+    }
+
     if (isDownloadSkipped(item)) {
-      return 'i-lucide-ban';
+      return "i-lucide-ban";
     }
 
     if (!item.filename) {
-      return 'i-lucide-triangle-alert';
+      return "i-lucide-triangle-alert";
     }
 
     if (item.extras?.is_premiere) {
-      return 'i-lucide-star';
+      return "i-lucide-star";
     }
 
-    return item.is_live ? 'i-lucide-globe' : 'i-lucide-circle-check-big';
+    return item.is_live ? "i-lucide-globe" : "i-lucide-circle-check-big";
   }
 
-  if ('error' === item.status) {
-    return 'i-lucide-circle-x';
+  if ("error" === item.status) {
+    return "i-lucide-circle-x";
   }
 
-  if ('cancelled' === item.status) {
-    return 'i-lucide-circle-off';
+  if ("cancelled" === item.status) {
+    return "i-lucide-circle-off";
   }
 
-  if ('not_live' === item.status) {
-    return item.extras?.is_premiere ? 'i-lucide-star' : 'i-lucide-headphones';
+  if ("not_live" === item.status) {
+    return item.extras?.is_premiere ? "i-lucide-star" : "i-lucide-headphones";
   }
 
-  if ('skip' === item.status) {
-    return 'i-lucide-ban';
+  if ("skip" === item.status) {
+    return "i-lucide-ban";
   }
 
-  return 'i-lucide-circle';
+  return "i-lucide-circle";
 };
 
 const setIconColor = (item: StoreItem): string => {
-  if ('finished' === item.status) {
+  if ("finished" === item.status) {
+    const subtitle = getSubtitleGeneration(item);
+    if (subtitle?.state === "running" || subtitle?.state === "queued") {
+      return "text-info";
+    }
+
+    if (subtitle?.state === "error") {
+      return "text-warning";
+    }
+
+    if (subtitle?.state === "finished") {
+      return "text-primary";
+    }
+
     if (isDownloadSkipped(item)) {
-      return 'text-info';
+      return "text-info";
     }
 
     if (!item.filename) {
-      return 'text-warning';
+      return "text-warning";
     }
 
-    return 'text-success';
+    return "text-success";
   }
 
-  if ('not_live' === item.status) {
-    return 'text-info';
+  if ("not_live" === item.status) {
+    return "text-info";
   }
 
-  if ('cancelled' === item.status || 'skip' === item.status) {
-    return 'text-warning';
+  if ("cancelled" === item.status || "skip" === item.status) {
+    return "text-warning";
   }
 
-  if ('error' === item.status && item.filename) {
-    return 'text-warning';
+  if ("error" === item.status && item.filename) {
+    return "text-warning";
   }
 
-  return 'text-error';
+  return "text-error";
 };
 
 const setStatus = (item: StoreItem): string => {
-  if ('finished' === item.status) {
+  if ("finished" === item.status) {
+    const subtitleStatus = getSubtitleStatus(item);
+    if (subtitleStatus) {
+      return subtitleStatus;
+    }
+
     if (isDownloadSkipped(item)) {
-      return 'Download skipped';
+      return "Download skipped";
     }
 
     if (item.extras?.is_premiere) {
-      return 'Premiered';
+      return "Premiered";
     }
 
-    return item.is_live ? 'Streamed' : 'Completed';
+    return item.is_live ? "Streamed" : "Completed";
   }
 
-  if ('error' === item.status) {
+  if ("error" === item.status) {
     if (item.filename) {
-      return 'Partial Error';
+      return "Partial Error";
     }
 
-    return 'Error';
+    return "Error";
   }
 
-  if ('cancelled' === item.status) {
-    return 'Cancelled';
+  if ("cancelled" === item.status) {
+    return "Cancelled";
   }
 
-  if ('not_live' === item.status) {
+  if ("not_live" === item.status) {
     if (item.extras?.is_premiere) {
-      return 'Premiere';
+      return "Premiere";
     }
 
-    return 'Live';
+    return "Live";
   }
 
-  if ('skip' === item.status) {
-    return 'Skipped';
+  if ("skip" === item.status) {
+    return "Skipped";
   }
 
-  return item.status || 'Unknown';
+  return item.status || "Unknown";
 };
 
 const retryIncomplete = async (): Promise<void> => {
@@ -1596,6 +1670,26 @@ const isQueuedAnimation = (item: StoreItem): string => {
   }
 
   return item.live_in || item.extras?.live_in || item.extras?.release_in ? 'animate-spin' : '';
+};
+
+const generateSubtitles = async (item: StoreItem): Promise<void> => {
+  try {
+    toast.info("Subtitle generation requested...", { timeout: 2000 });
+    const response = await request(`/api/history/${item._id}/subtitle`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast.error(data.error || "Failed to generate subtitles");
+      return;
+    }
+
+    toast.success(data.message || "Subtitle generation started");
+  } catch (error: any) {
+    toast.error(`Error: ${error.message}`);
+  }
 };
 
 const generateNfo = async (item: StoreItem): Promise<void> => {

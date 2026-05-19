@@ -149,6 +149,8 @@ class Tasks(metaclass=Singleton):
                             "source_name": task.name,
                             "source_id": str(task.id),
                             "source_handler": "Tasks",
+                            "download_mode": task.download_mode,
+                            "subtitle_mode": task.subtitle_mode,
                         },
                     }
                 )

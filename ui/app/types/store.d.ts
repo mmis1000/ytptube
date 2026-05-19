@@ -93,6 +93,35 @@ type StoreItem = {
     /** Live stream start time if available */
     is_premiere?: boolean;
     /** If the item is a premiere */
+    download_mode?: string;
+    /** Requested integrated download/subtitle workflow. */
+    subtitle_mode?: string;
+    /** Requested subtitle generation mode. */
+    subtitle_generation?: {
+      state?: string;
+      phase?: string;
+      message?: string;
+      requested_at?: string;
+      updated_at?: string;
+      completed_at?: string;
+      workspace?: string;
+      output_dir?: string;
+      log_file?: string;
+      last_line?: string;
+      subtitle_files?: Array<string>;
+      payload?: {
+        source?: string;
+        force?: boolean;
+        lang?: string;
+        mode?: string;
+        asr_mode?: string;
+      };
+      progress?: {
+        current?: number;
+        total?: number;
+        track?: string;
+      };
+    };
   };
   /** The item temporary filename */
   tmpfilename?: string | null;

@@ -235,6 +235,63 @@ class Config(metaclass=Singleton):
     static_ui_path: str = ""
     "The path to the static UI files."
 
+    translator_project_path: str = "{app_path}{os_sep}..{os_sep}translator"
+    """Path to the standalone translator project."""
+
+    translator_workspace: str = "{temp_path}{os_sep}translator"
+    """Workspace root used for subtitle generation jobs."""
+
+    translator_npm_exe: str = "npm"
+    """npm executable used to run the translator CLI."""
+
+    translator_model_path: str = ""
+    """Local GGUF model used by the translator when no server URL is configured."""
+
+    translator_hf_repo: str = ""
+    """Optional HuggingFace repo used instead of a local translator model path."""
+
+    translator_server_url: str = ""
+    """External llama-server URL for translator jobs. If set, internal server startup is skipped."""
+
+    translator_llama_server_exe: str = "llama-server"
+    """llama-server executable used for translator jobs when server_url is empty."""
+
+    translator_port: int = 8181
+    """Port used for internally managed translator llama-server instances."""
+
+    translator_gpu_layers: str = "all"
+    """GPU layer setting passed through to the translator CLI."""
+
+    translator_ctx_size: int = 8192
+    """Context size used by translator jobs."""
+
+    translator_parallel: int = 1
+    """Parallel slots used by translator jobs."""
+
+    translator_mtp: bool = False
+    """Enable MTP mode for translator jobs."""
+
+    translator_spec_draft_n_max: int = 2
+    """Speculative draft token limit for translator MTP mode."""
+
+    translator_asr_mode: str = "python"
+    """Default ASR mode for translator jobs."""
+
+    translator_python_exe: str = ""
+    """Python executable used by translator ASR mode."""
+
+    translator_asr_script: str = ""
+    """Optional asr_cli.py path override passed to the translator CLI."""
+
+    translator_uv_exe: str = "uv"
+    """uv executable used by translator yt-dlp helpers."""
+
+    translator_locale: str = "zh-tw"
+    """Default subtitle output locale used by translator jobs."""
+
+    translator_mode: str = "echo"
+    """Default translator output mode used by subtitle jobs."""
+
     check_for_updates: bool = True
     "Check for application updates."
 
@@ -276,6 +333,10 @@ class Config(metaclass=Singleton):
         "auto_clear_history_days",
         "default_pagination",
         "extract_info_concurrency",
+        "translator_port",
+        "translator_ctx_size",
+        "translator_parallel",
+        "translator_spec_draft_n_max",
         "thumb_concurrency",
         "flaresolverr_max_timeout",
         "flaresolverr_client_timeout",
@@ -304,6 +365,7 @@ class Config(metaclass=Singleton):
         "check_for_updates",
         "thumb_generate",
         "thumb_sidecar",
+        "translator_mtp",
     )
     "The variables that are booleans."
 

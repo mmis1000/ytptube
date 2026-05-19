@@ -265,6 +265,32 @@
       </div>
 
       <div class="space-y-5">
+        <div class="grid gap-4 xl:grid-cols-1">
+          <UFormField class="w-full" :ui="fieldUi">
+            <template #label>
+              <div class="flex flex-wrap items-center gap-2">
+                <UIcon name="i-lucide-captions" class="size-4 text-toned" />
+                <span class="font-semibold text-default">Subtitle workflow</span>
+              </div>
+            </template>
+            <template #description>
+              Control whether completed task runs should trigger integrated subtitle generation.
+            </template>
+            <USelect
+              v-model="subtitleWorkflow"
+              :items="subtitleWorkflowItems"
+              value-key="value"
+              label-key="label"
+              :disabled="addInProgress"
+              size="lg"
+              class="w-full"
+              :ui="{ base: 'w-full' }"
+            />
+          </UFormField>
+        </div>
+      </div>
+
+      <div class="space-y-5">
         <div class="grid gap-4 xl:grid-cols-2">
           <UFormField class="w-full" :ui="fieldUi">
             <template #label>
@@ -541,6 +567,8 @@ const createDefaultTask = (source?: Partial<Task>): Task => ({
   timer: '',
   template: '',
   cli: '',
+  download_mode: 'download',
+  subtitle_mode: 'none',
   auto_start: true,
   handler_enabled: true,
   enabled: true,
@@ -596,6 +624,40 @@ const textareaUi = {
   root: 'w-full',
   base: 'min-h-[7rem] w-full bg-elevated/60 ring-default focus-visible:ring-primary',
 };
+
+const subtitleWorkflowItems = [
+  { label: "Download only", value: "download_only" },
+  { label: "Download + source subtitles", value: "source_subtitles" },
+  { label: "Download + translated subtitles", value: "translated_subtitles" },
+];
+
+const subtitleWorkflow = computed<string>({
+  get: () => {
+    if (form.download_mode === 'download+subtitle' && form.subtitle_mode === 'translate') {
+      return 'translated_subtitles';
+    }
+    if (form.download_mode === 'download+subtitle' && form.subtitle_mode === 'transcribe') {
+      return 'source_subtitles';
+    }
+    return 'download_only';
+  },
+  set: (value) => {
+    if (value === 'translated_subtitles') {
+      form.download_mode = 'download+subtitle';
+      form.subtitle_mode = 'translate';
+      return;
+    }
+
+    if (value === 'source_subtitles') {
+      form.download_mode = 'download+subtitle';
+      form.subtitle_mode = 'transcribe';
+      return;
+    }
+
+    form.download_mode = 'download';
+    form.subtitle_mode = 'none';
+  },
+});
 
 const isMultiLineInput = computed(() => Boolean(form.url && form.url.includes('\n')));
 const urlCount = computed(() => splitUrls(form.url || '').length);
@@ -822,6 +884,8 @@ const checkInfo = async (): Promise<void> => {
         auto_start: form.auto_start,
         handler_enabled: form.handler_enabled,
         enabled: form.enabled,
+        download_mode: form.download_mode,
+        subtitle_mode: form.subtitle_mode,
       } as Task;
     }
 
@@ -830,6 +894,8 @@ const checkInfo = async (): Promise<void> => {
       preset: form.preset,
       timer: form.timer,
       handler_enabled: form.handler_enabled,
+      download_mode: form.download_mode,
+      subtitle_mode: form.subtitle_mode,
     } as Task;
   });
 

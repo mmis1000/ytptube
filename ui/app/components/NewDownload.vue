@@ -217,6 +217,30 @@
                 />
               </div>
 
+              <div class="xl:col-span-3">
+                <UFormField class="w-full" :ui="advancedEditorFieldUi">
+                  <template #label>
+                    <span class="inline-flex items-center gap-2 font-semibold">
+                      <UIcon name="i-lucide-captions" class="size-4 text-toned" />
+                      <span>Subtitle workflow</span>
+                    </span>
+                  </template>
+                  <template #description>
+                    <span>Choose whether this download should trigger integrated subtitle generation.</span>
+                  </template>
+                  <USelect
+                    v-model="subtitleWorkflow"
+                    :items="subtitleWorkflowItems"
+                    value-key="value"
+                    label-key="label"
+                    class="w-full"
+                    size="lg"
+                    :disabled="addInProgress"
+                    :ui="{ base: 'w-full', content: 'min-w-[16rem]' }"
+                  />
+                </UFormField>
+              </div>
+
               <div class="xl:col-span-2">
                 <DLInput
                   id="no_cache"
@@ -662,6 +686,35 @@ const mergeIgnoreConditionsIntoExtras = (
   return nextExtras;
 };
 
+const subtitleWorkflowItems = [
+  { label: "Download only", value: "download_only" },
+  { label: "Download + source subtitles", value: "source_subtitles" },
+  { label: "Download + translated subtitles", value: "translated_subtitles" },
+];
+
+const mergeSubtitleWorkflowIntoExtras = (
+  extras: Record<string, unknown> | undefined,
+  workflow: string,
+): Record<string, unknown> => {
+  const nextExtras = { ...(extras || {}) };
+
+  if (workflow === "translated_subtitles") {
+    nextExtras.download_mode = "download+subtitle";
+    nextExtras.subtitle_mode = "translate";
+    return nextExtras;
+  }
+
+  if (workflow === "source_subtitles") {
+    nextExtras.download_mode = "download+subtitle";
+    nextExtras.subtitle_mode = "transcribe";
+    return nextExtras;
+  }
+
+  delete nextExtras.download_mode;
+  delete nextExtras.subtitle_mode;
+  return nextExtras;
+};
+
 const hasAllConditionsLoaded = computed(() => {
   const loaded = conditions.conditions.value.length;
   const total = conditions.pagination.value.total;
@@ -684,6 +737,22 @@ const selectedIgnoreConditions = computed<string[]>({
       form.value?.extras,
       normalizeIgnoreConditionValues(values),
     );
+    form.value.extras = Object.keys(extras).length > 0 ? extras : {};
+  },
+});
+
+const subtitleWorkflow = computed<string>({
+  get: () => {
+    if (form.value?.extras?.download_mode === 'download+subtitle' && form.value?.extras?.subtitle_mode === 'translate') {
+      return 'translated_subtitles';
+    }
+    if (form.value?.extras?.download_mode === 'download+subtitle' && form.value?.extras?.subtitle_mode === 'transcribe') {
+      return 'source_subtitles';
+    }
+    return 'download_only';
+  },
+  set: (value) => {
+    const extras = mergeSubtitleWorkflowIntoExtras(form.value?.extras, value);
     form.value.extras = Object.keys(extras).length > 0 ? extras : {};
   },
 });

@@ -12,6 +12,7 @@ from app.library.cache import Cache
 from app.library.ItemDTO import ItemDTO
 from app.library.encoder import Encoder
 from app.routes.api import history
+from app.features.translator.service import TranslatorService
 from app.routes.api.history import item_rename, item_thumbnail, items_delete
 from app.tests.helpers import temporary_test_dir
 
@@ -296,3 +297,43 @@ async def test_item_thumbnail_missing_cache() -> None:
     assert first.status == 404
     assert second.status == 404
     assert seen["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_item_subtitle_generate_accepts_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    request = _FakeRequest(payload={"force": True, "lang": "zh-tw", "subtitle_mode": "transcribe"})
+    request.match_info["id"] = "item-1"
+    item = _make_download(filename="video.mp4")
+    queue = SimpleNamespace(done=SimpleNamespace(get_by_id=AsyncMock(return_value=item)))
+
+    class _Svc:
+        async def start_for_history_item(self, item_id: str, **kwargs):
+            assert item_id == 'item-1'
+            assert kwargs['force'] is True
+            assert kwargs['lang'] == 'zh-tw'
+            assert kwargs['subtitle_mode'] == 'transcribe'
+            return {"status": "accepted", "item_id": item_id}
+
+    monkeypatch.setattr(TranslatorService, 'get_instance', staticmethod(lambda: _Svc()))
+    response = await history.item_subtitle_generate(request, queue)
+    assert response.status == 200
+    body = json.loads(response.body.decode('utf-8'))
+    assert body == {"status": "accepted", "item_id": "item-1"}
+
+
+@pytest.mark.asyncio
+async def test_item_subtitle_generate_missing_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    request = _FakeRequest(payload={})
+    request.match_info["id"] = "item-1"
+    item = _make_download(filename="video.mp4")
+    queue = SimpleNamespace(done=SimpleNamespace(get_by_id=AsyncMock(return_value=item)))
+
+    class _Svc:
+        async def start_for_history_item(self, item_id: str, **kwargs):
+            raise ValueError('item has no downloaded file.')
+
+    monkeypatch.setattr(TranslatorService, 'get_instance', staticmethod(lambda: _Svc()))
+    response = await history.item_subtitle_generate(request, queue)
+    assert response.status == 400
+    body = json.loads(response.body.decode('utf-8'))
+    assert body == {"error": "item has no downloaded file."}

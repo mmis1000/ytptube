@@ -201,15 +201,22 @@ const reset = (): void => {
   lastError.value = null;
 };
 
-const upsert = (item: StoreItem): void => {
+const replaceExisting = (item: StoreItem): boolean => {
   const existingIndex = items.value.findIndex((existing) => existing._id === item._id);
+  if (existingIndex === -1) {
+    return false;
+  }
 
-  if (existingIndex !== -1) {
-    items.value = [
-      item,
-      ...items.value.slice(0, existingIndex),
-      ...items.value.slice(existingIndex + 1),
-    ];
+  items.value = [
+    ...items.value.slice(0, existingIndex),
+    item,
+    ...items.value.slice(existingIndex + 1),
+  ];
+  return true;
+};
+
+const upsert = (item: StoreItem): void => {
+  if (replaceExisting(item)) {
     return;
   }
 
@@ -225,6 +232,18 @@ const upsert = (item: StoreItem): void => {
     Math.ceil(pagination.value.total / pagination.value.per_page),
   );
   pagination.value.has_next = pagination.value.page < pagination.value.total_pages;
+};
+
+const updatedHandler = (
+  shouldHandle: () => boolean = () => isLoaded.value,
+): ((payload: WSEP["item_updated"]) => void) => {
+  return (payload: WSEP["item_updated"]): void => {
+    if (!shouldHandle()) {
+      return;
+    }
+
+    replaceExisting(payload.data);
+  };
 };
 
 const moveHandler = (
@@ -253,6 +272,7 @@ export const useHistoryState = () => {
     rename,
     reset,
     upsert,
+    updatedHandler,
     moveHandler,
   };
 };

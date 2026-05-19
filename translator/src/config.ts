@@ -55,6 +55,7 @@ export interface TranslatorConfig {
   // Translation
   locale: "zh-tw" | "zh-cn";
   mode: "base" | "echo";
+  subtitleMode: "translate" | "transcribe";
 
   // ASR
   asrMode: "python" | "skip";
@@ -119,6 +120,7 @@ export const DEFAULT_CONFIG: Omit<TranslatorConfig,
   minP:           0.0,
   locale:         "zh-tw",
   mode:           "echo",
+  subtitleMode:   "translate",
   asrMode:        "skip",
   asrEngine:      "whisper",
   pythonExe:      DEFAULT_ASR_PYTHON,

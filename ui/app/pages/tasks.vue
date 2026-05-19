@@ -766,6 +766,8 @@ const createEmptyTask = (): Partial<Task> => ({
   folder: '',
   template: '',
   cli: '',
+  download_mode: 'download',
+  subtitle_mode: 'none',
   auto_start: true,
   handler_enabled: true,
   enabled: true,
@@ -1235,6 +1237,8 @@ const runNow = async (item: Task, mass: boolean = false) => {
       source_name: item.name,
       source_id: item.id,
       source_handler: 'Web',
+      download_mode: item.download_mode || 'download',
+      subtitle_mode: item.subtitle_mode || 'none',
     },
   };
 
