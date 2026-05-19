@@ -2,15 +2,6 @@ name: build-docker-containers
 
 on:
   workflow_dispatch:
-    inputs:
-      build:
-        description: "Build and publish native multi-arch image"
-        type: boolean
-        default: true
-      update_readme:
-        description: "Also sync DockerHub README"
-        type: boolean
-        default: false
   push:
     branches:
       - dev
@@ -23,11 +14,8 @@ on:
       - ".github/ISSUE_TEMPLATE/**"
 
 env:
-  REGISTRY: ${{ vars.REGISTRY != '' && vars.REGISTRY || '' }}
   BUILD_AMD64: ${{ vars.BUILD_AMD64 != 'false' && 'true' || 'false' }}
-  BUILD_ARM64: ${{ vars.BUILD_ARM64 != 'false' && 'true' || 'false' }}
-  DOCKERHUB_SLUG: arabcoders/ytptube
-  GHCR_SLUG: ghcr.io/arabcoders/ytptube
+  GHCR_SLUG: ghcr.io/${{ github.repository }}
   BUN_VERSION: latest
   NODE_VERSION: 20
   PYTHON_VERSION: "3.13"
@@ -38,15 +26,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Check if at least one architecture is enabled
+      - name: Check if amd64 build is enabled
         run: |
-          if [ "${{ vars.BUILD_AMD64 }}" = "false" ] && [ "${{ vars.BUILD_ARM64 }}" = "false" ]; then
-            echo "::error::Both BUILD_AMD64 and BUILD_ARM64 are disabled. At least one architecture must be enabled."
+          if [ "${{ vars.BUILD_AMD64 }}" = "false" ]; then
+            echo "::error::BUILD_AMD64 is disabled. This workflow only publishes amd64 to GHCR."
             exit 1
           fi
           echo "Build configuration is valid"
           echo "BUILD_AMD64: ${{ vars.BUILD_AMD64 != 'false' && 'true' || 'false' }}"
-          echo "BUILD_ARM64: ${{ vars.BUILD_ARM64 != 'false' && 'true' || 'false' }}"
 
   test:
     name: Run Tests & Prepare Frontend
@@ -145,7 +132,6 @@ jobs:
 
       - name: Upload frontend build
         uses: actions/upload-artifact@v4
-        if: env.REGISTRY == ''
         with:
           name: frontend-build
           path: ui/exported/
@@ -169,7 +155,6 @@ jobs:
 
       - name: Download frontend build
         uses: actions/download-artifact@v4
-        if: env.REGISTRY == ''
         with:
           name: frontend-build
           path: ui/exported/
@@ -201,9 +186,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            name=${{ env.DOCKERHUB_SLUG }},enable=${{ env.REGISTRY == '' }}
-            name=${{ env.GHCR_SLUG }},enable=${{ env.REGISTRY == '' }}
-            name=${{ env.REGISTRY }}/${{ github.repository }},enable=${{ env.REGISTRY != '' }}
+            name=${{ env.GHCR_SLUG }}
           flavor: |
             latest=false
             suffix=-${{ env.ARCH }}
@@ -212,28 +195,13 @@ jobs:
             type=ref,event=tag
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
-      - name: Login to Private Registry
-        uses: docker/login-action@v3
-        if: env.REGISTRY != ''
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GIT_TOKEN && secrets.GIT_TOKEN || secrets.GITHUB_TOKEN }}
-
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
-        if: env.REGISTRY == ''
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        if: env.REGISTRY == ''
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -250,253 +218,3 @@ jobs:
           cache-from: type=gha,scope=${{ github.workflow }}
           provenance: true
 
-  docker-build-arm64:
-    name: Build Container (arm64)
-    runs-on: ubuntu-latest
-    needs: [test, validate-build-config]
-    if: vars.BUILD_ARM64 != 'false'
-    permissions:
-      packages: write
-      contents: write
-    env:
-      ARCH: arm64
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download frontend build
-        uses: actions/download-artifact@v4
-        if: env.REGISTRY == ''
-        with:
-          name: frontend-build
-          path: ui/exported/
-
-      - name: Update app/library/version.py
-        run: |
-          VERSION="${GITHUB_REF##*/}"
-          SHA=$(git rev-parse HEAD)
-          DATE=$(date -u +"%Y%m%d")
-          BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | sed 's/\//-/g')
-
-          echo "APP_VERSION=${VERSION}" >> "$GITHUB_ENV"
-          echo "APP_SHA=${SHA}" >> "$GITHUB_ENV"
-          echo "APP_DATE=${DATE}" >> "$GITHUB_ENV"
-          echo "APP_BRANCH=${BRANCH}" >> "$GITHUB_ENV"
-
-          sed -i \
-            -e "s/^APP_VERSION = \".*\"/APP_VERSION = \"${VERSION}\"/" \
-            -e "s/^APP_COMMIT_SHA = \".*\"/APP_COMMIT_SHA = \"${SHA}\"/" \
-            -e "s/^APP_BUILD_DATE = \".*\"/APP_BUILD_DATE = \"${DATE}\"/" \
-            -e "s/^APP_BRANCH = \".*\"/APP_BRANCH = \"${BRANCH}\"/" \
-            app/library/version.py
-
-          echo "Updated version info:"
-          cat app/library/version.py
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            name=${{ env.DOCKERHUB_SLUG }},enable=${{ env.REGISTRY == '' }}
-            name=${{ env.GHCR_SLUG }},enable=${{ env.REGISTRY == '' }}
-            name=${{ env.REGISTRY }}/${{ github.repository }},enable=${{ env.REGISTRY != '' }}
-          flavor: |
-            latest=false
-            suffix=-${{ env.ARCH }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-
-      - name: Login to Private Registry
-        uses: docker/login-action@v3
-        if: env.REGISTRY != ''
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GIT_TOKEN && secrets.GIT_TOKEN || secrets.GITHUB_TOKEN }}
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        if: env.REGISTRY == ''
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        if: env.REGISTRY == ''
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/${{ env.ARCH }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-to: type=gha,mode=max,scope=${{ github.workflow }}
-          cache-from: type=gha,scope=${{ github.workflow }}
-          provenance: true
-
-  docker-publish-manifest:
-    name: Publish multi-arch manifest
-    runs-on: ubuntu-latest
-    needs: [docker-build-amd64, docker-build-arm64]
-    if: |
-      !cancelled() &&
-      (needs.docker-build-amd64.result == 'success' || needs.docker-build-arm64.result == 'success')
-    permissions:
-      packages: write
-      contents: write
-    steps:
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            name=${{ env.DOCKERHUB_SLUG }},enable=${{ env.REGISTRY == '' }}
-            name=${{ env.GHCR_SLUG }},enable=${{ env.REGISTRY == '' }}
-            name=${{ env.REGISTRY }}/${{ github.repository }},enable=${{ env.REGISTRY != '' }}
-          flavor: |
-            latest=false
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-
-      - name: Login to Private Registry
-        uses: docker/login-action@v3
-        if: env.REGISTRY != ''
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GIT_TOKEN && secrets.GIT_TOKEN || secrets.GITHUB_TOKEN }}
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        if: env.REGISTRY == ''
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        if: env.REGISTRY == ''
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Create and push manifest list
-        shell: bash
-        run: |
-          IFS=$'\n'
-          BUILD_AMD64="${{ env.BUILD_AMD64 }}"
-          BUILD_ARM64="${{ env.BUILD_ARM64 }}"
-
-          for tag in $(echo "${{ steps.meta.outputs.tags }}"); do
-            echo "Creating manifest for ${tag}"
-
-            IMAGES=()
-            if [ "$BUILD_AMD64" = "true" ]; then
-              IMAGES+=("${tag}-amd64")
-            fi
-            if [ "$BUILD_ARM64" = "true" ]; then
-              IMAGES+=("${tag}-arm64")
-            fi
-
-            if [ ${#IMAGES[@]} -eq 0 ]; then
-              echo "::error::No architectures enabled for manifest creation"
-              exit 1
-            fi
-
-            docker buildx imagetools create --tag "$tag" "${IMAGES[@]}"
-          done
-
-      - name: Overwrite GitHub release notes
-        if: startsWith(github.ref, 'refs/tags/v') && env.REGISTRY == ''
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const tag = context.ref.replace('refs/tags/', '');
-
-            const { data: releases } = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-
-            const release = releases.find(r => r.tag_name === tag);
-            if (!release) {
-              core.setFailed(`Release with tag ${tag} not found`);
-              return;
-            }
-
-            const baseTag = releases[1]?.tag_name || '';
-            if (!baseTag) {
-              core.setFailed('Could not determine a base tag (no previous release found)');
-              return;
-            }
-
-            const { data: comparison } = await github.rest.repos.compareCommits({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              base: baseTag,
-              head: tag,
-            });
-
-            const commits = comparison.commits.filter(c => c.parents.length === 1);
-
-            const changelog = commits
-              .map(c => `- ${c.sha.substring(0, 7)} ${c.commit.message.split('\n')[0]}`)
-              .join('\n');
-
-            if (!changelog) {
-              core.setFailed('No commits found for the changelog');
-              return;
-            }
-
-            const existingBody = (release.body || '').trim();
-
-            const separator = `\n\n---\n\n## Commits since ${baseTag}\n\n`;
-            const newBody = existingBody
-              ? `${existingBody}${separator}${changelog}`
-              : `## Commits since ${baseTag}\n\n${changelog}`;
-
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: release.id,
-              body: newBody,
-            });
-
-  dockerhub-sync-readme:
-    name: DockerHub README sync
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.update_readme == 'true')
-    steps:
-      - name: Sync README
-        uses: docker://lsiodev/readme-sync:latest
-        if: env.REGISTRY == ''
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
-          GIT_REPOSITORY: ${{ github.repository }}
-          DOCKER_REPOSITORY: ${{ env.DOCKERHUB_SLUG }}
-          GIT_BRANCH: master
-        with:
-          entrypoint: node
-          args: /opt/docker-readme-sync/sync
