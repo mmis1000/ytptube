@@ -45,6 +45,7 @@ Required:
   --output <dir>           Output directory (separate from input)
   --model <path>           Fine-tuned translation GGUF model (required unless --hf-repo or --server-url)
   --hf-repo <repo>         HuggingFace repo for translation model ("user/model[:quant]" or full HF URL)
+  --hf-file <file>         Exact GGUF filename inside --hf-repo for repos llama.cpp cannot auto-select
 
 Metadata (optional, pick one):
   --dlsite <id|url>        DLSite work ID or URL — scrapes metadata for context
@@ -107,6 +108,7 @@ function parseCliArgs(): TranslatorConfig {
       output:            { type: "string" },
       model:             { type: "string" },
       "hf-repo":         { type: "string" },
+      "hf-file":         { type: "string" },
       dlsite:            { type: "string" },
       ytdlp:             { type: "string" },
       metadata:          { type: "string" },
@@ -221,6 +223,7 @@ function parseCliArgs(): TranslatorConfig {
     outputDir: path.resolve(values.output as string),
     modelPath: values.model ? path.resolve(values.model as string) : "",
     hfRepo: values["hf-repo"] ? parseHfRepo(values["hf-repo"] as string) : undefined,
+    hfFile: (values["hf-file"] as string) ?? DEFAULT_CONFIG.hfFile,
     dlsiteId: values.dlsite as string | undefined,
     ytdlpUrl: values.ytdlp as string | undefined,
     metadataFile: values.metadata ? path.resolve(values.metadata as string) : undefined,

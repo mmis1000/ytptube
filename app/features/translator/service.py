@@ -347,6 +347,8 @@ class TranslatorService(metaclass=Singleton):
             cmd.extend(["--server-url", config.translator_server_url])
         elif subtitle_mode != "transcribe" and config.translator_hf_repo:
             cmd.extend(["--hf-repo", config.translator_hf_repo])
+            if config.translator_hf_file:
+                cmd.extend(["--hf-file", config.translator_hf_file])
         elif subtitle_mode != "transcribe" and config.translator_model_path:
             cmd.extend(["--model", config.translator_model_path])
         elif subtitle_mode != "transcribe":

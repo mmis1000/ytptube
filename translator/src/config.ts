@@ -24,6 +24,7 @@ export interface TranslatorConfig {
   llamaServerExe: string;
   modelPath: string;
   hfRepo?: string | undefined;          // HuggingFace repo "user/model[:quant]" — overrides modelPath
+  hfFile?: string | undefined;          // Exact GGUF filename inside hfRepo, passed to llama.cpp --hf-file
   serverPort: number;
   gpuLayers: number | "auto" | "all";   // "all" forces every layer to GPU; "auto" lets llama-server decide
   contextSize: number;
@@ -102,6 +103,7 @@ export const DEFAULT_CONFIG: Omit<TranslatorConfig,
   "modelPath" | "inputDir" | "outputDir"
 > = {
   llamaServerExe: "llama-server",
+  hfFile:         undefined,
   serverPort:     8181,
   gpuLayers:      "all",
   contextSize:    8192,

@@ -4,6 +4,7 @@ export interface ServerConfig {
   llamaServerExe: string;
   modelPath: string;                    // local GGUF path; ignored when hfRepo is set
   hfRepo?: string | undefined;          // HuggingFace repo "user/model[:quant]"; takes priority over modelPath
+  hfFile?: string | undefined;          // Exact GGUF filename inside hfRepo, passed via --hf-file
   serverPort: number;
   gpuLayers: number | "auto" | "all";
   contextSize: number;
@@ -51,7 +52,7 @@ export class LlamaServerManager {
 
     const args = [
       ...(this.config.hfRepo
-        ? ["-hfr", this.config.hfRepo]
+        ? ["-hfr", this.config.hfRepo, ...(this.config.hfFile ? ["--hf-file", this.config.hfFile] : [])]
         : ["-m", this.config.modelPath]),
       "--ctx-size", String(this.config.contextSize),
       "--gpu-layers", String(this.config.gpuLayers),

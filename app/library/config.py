@@ -250,6 +250,9 @@ class Config(metaclass=Singleton):
     translator_hf_repo: str = ""
     """Optional HuggingFace repo used instead of a local translator model path."""
 
+    translator_hf_file: str = ""
+    """Optional exact GGUF filename within translator_hf_repo passed to llama.cpp --hf-file."""
+
     translator_server_url: str = ""
     """External llama-server URL for translator jobs. If set, internal server startup is skipped."""
 
