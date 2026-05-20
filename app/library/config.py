@@ -242,7 +242,10 @@ class Config(metaclass=Singleton):
     """Workspace root used for subtitle generation jobs."""
 
     translator_npm_exe: str = "npm"
-    """npm executable used to run the translator CLI."""
+    """npm executable used to run the translator CLI when falling back to source execution."""
+
+    translator_node_exe: str = "node"
+    """Node.js executable used to launch the built translator dist/cli.js entrypoint when available."""
 
     translator_model_path: str = ""
     """Local GGUF model used by the translator when no server URL is configured."""

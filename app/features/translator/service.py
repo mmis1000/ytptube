@@ -321,26 +321,38 @@ class TranslatorService(metaclass=Singleton):
         if not project_path.exists():
             message = f"translator project path does not exist: {project_path}"
             raise ValueError(message)
-        cmd = [
-            config.translator_npm_exe,
-            "run",
-            "start",
-            "--",
-            "--input",
-            str(input_dir),
-            "--output",
-            str(output_dir),
-            "--metadata",
-            str(metadata_path),
-            "--lang",
-            str(payload.get("lang") or config.translator_locale),
-            "--mode",
-            str(payload.get("mode") or config.translator_mode),
-            "--asr",
-            str(payload.get("asr_mode") or config.translator_asr_mode),
-            "--subtitle-mode",
-            str(payload.get("subtitle_mode") or SUBTITLE_MODE_TRANSLATE),
-        ]
+        dist_cli = project_path / "dist" / "cli.js"
+        if dist_cli.exists():
+            cmd = [
+                config.translator_node_exe,
+                str(dist_cli),
+            ]
+        else:
+            cmd = [
+                config.translator_npm_exe,
+                "run",
+                "start",
+                "--",
+            ]
+
+        cmd.extend(
+            [
+                "--input",
+                str(input_dir),
+                "--output",
+                str(output_dir),
+                "--metadata",
+                str(metadata_path),
+                "--lang",
+                str(payload.get("lang") or config.translator_locale),
+                "--mode",
+                str(payload.get("mode") or config.translator_mode),
+                "--asr",
+                str(payload.get("asr_mode") or config.translator_asr_mode),
+                "--subtitle-mode",
+                str(payload.get("subtitle_mode") or SUBTITLE_MODE_TRANSLATE),
+            ]
+        )
 
         subtitle_mode = str(payload.get("subtitle_mode") or SUBTITLE_MODE_TRANSLATE)
         if subtitle_mode != "transcribe" and config.translator_server_url:
