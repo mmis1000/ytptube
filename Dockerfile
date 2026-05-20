@@ -41,6 +41,22 @@ WORKDIR /build/translator/asr
 COPY translator/asr/ ./
 RUN chmod +x ./setup.sh && ./setup.sh
 
+FROM debian:bookworm-slim AS llama_cpp_rocm_builder
+
+ARG LLAMA_CPP_RELEASE=b9247
+ARG LLAMA_CPP_ROCM_ARCHIVE=llama-${LLAMA_CPP_RELEASE}-bin-ubuntu-rocm-7.2-x64.tar.gz
+
+RUN apt-get update && \
+  apt-get install -y --no-install-recommends ca-certificates curl tar && \
+  rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/llama.cpp
+RUN curl -fsSL -o /tmp/${LLAMA_CPP_ROCM_ARCHIVE} \
+    https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_CPP_RELEASE}/${LLAMA_CPP_ROCM_ARCHIVE} && \
+  tar -xzf /tmp/${LLAMA_CPP_ROCM_ARCHIVE} --strip-components=1 -C /opt/llama.cpp && \
+  rm -f /tmp/${LLAMA_CPP_ROCM_ARCHIVE} && \
+  test -x /opt/llama.cpp/llama-server
+
 FROM python:3.13-bookworm AS app_python_builder
 
 ENV LANG=C.UTF-8
@@ -83,7 +99,7 @@ ENV XDG_CACHE_HOME=/tmp
 ENV PYDEVD_DISABLE_FILE_VALIDATION=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONFAULTHANDLER=1
-ENV PATH="/opt/bin:/opt/python/bin:/usr/local/bin:$PATH"
+ENV PATH="/opt/bin:/opt/python/bin:/opt/llama.cpp:/usr/local/bin:$PATH"
 ENV HOME=/app
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
@@ -92,6 +108,7 @@ ENV LC_ALL=en_US.UTF-8
 COPY --from=astral/uv:latest /uv /usr/local/bin/uv
 COPY --from=translator_node_builder /usr/local/ /usr/local/
 COPY --from=app_python_builder /usr/local/ /usr/local/
+COPY --from=llama_cpp_rocm_builder /opt/llama.cpp /opt/llama.cpp
 
 RUN install -d -m 0775 -o ${USER_ID} -g 0 /app /config /downloads && \
   ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && \
