@@ -24,6 +24,14 @@ export class LlamaServerManager {
   private label: string;
   private usingExistingServer = false;
 
+  private shellQuote(value: string): string {
+    return /^[A-Za-z0-9_./:@%+=,-]+$/.test(value) ? value : JSON.stringify(value);
+  }
+
+  private formatCommand(args: string[]): string {
+    return [this.config.llamaServerExe, ...args].map((part) => this.shellQuote(part)).join(" ");
+  }
+
   constructor(private config: ServerConfig, label = "LlamaServer") {
     this.baseUrl = config.serverUrl ?? `http://127.0.0.1:${config.serverPort}`;
     this.label = label;
@@ -70,7 +78,10 @@ export class LlamaServerManager {
       // "--cache-type-v", "q8_0",
     ];
 
+    const commandString = this.formatCommand(args);
+
     console.log(`[${this.label}] Starting ${this.config.llamaServerExe} on port ${this.config.serverPort}${this.config.mtp ? ` with MTP (draft-n-max=${this.config.specDraftNMax})` : ""}...`);
+    console.log(`[${this.label}] Command: ${commandString}`);
 
     this.process = spawn(this.config.llamaServerExe, args, {
       stdio: ["ignore", "pipe", "pipe"],
@@ -108,6 +119,7 @@ export class LlamaServerManager {
       this.process!.on("error", (err) => {
         if (!isReady) {
           clearTimeout(startupTimer);
+          console.error(`[${this.label}] Failed command: ${commandString}`);
           reject(err);
         }
         this.process = null;
@@ -117,7 +129,8 @@ export class LlamaServerManager {
         this.process = null;
         if (!isReady) {
           clearTimeout(startupTimer);
-          reject(new Error(`${this.label} exited early with code ${code}`));
+          console.error(`[${this.label}] Failed command: ${commandString}`);
+          reject(new Error(`${this.label} exited early with code ${code}; command: ${commandString}`));
         } else if (!this.isStopping) {
           console.error(`\n[${this.label}] CRASH DETECTED! Exited with code ${code}. Auto-restarting...`);
           this.restartPromise = this.start().then(() => {
@@ -133,7 +146,8 @@ export class LlamaServerManager {
       const defaultTimeout = this.config.hfRepo ? 30 * 60 * 1000 : 5 * 60 * 1000;
       startupTimer = setTimeout(() => {
         if (!isReady) {
-          reject(new Error(`Timeout waiting for ${this.label} to be ready.`));
+          console.error(`[${this.label}] Timed out waiting for readiness. Command: ${commandString}`);
+          reject(new Error(`Timeout waiting for ${this.label} to be ready; command: ${commandString}`));
           this.stop();
         }
       }, this.config.startupTimeoutMs ?? defaultTimeout);

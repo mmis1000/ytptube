@@ -38,7 +38,9 @@ RUN apt-get update && \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build/translator/asr
-COPY translator/asr/ ./
+COPY translator/asr/setup.sh ./setup.sh
+COPY translator/asr/pyproject.toml translator/asr/uv.lock ./
+COPY translator/asr/qwen_env/pyproject.toml translator/asr/qwen_env/uv.lock ./qwen_env/
 RUN chmod +x ./setup.sh && ./setup.sh
 
 FROM debian:bookworm-slim AS llama_cpp_rocm_builder
