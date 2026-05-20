@@ -60,7 +60,7 @@ WORKDIR /opt/
 COPY ./pyproject.toml ./uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/pip,id=pip-cache \
   --mount=type=cache,target=/root/.cache/uv,id=uv-cache \
-  uv venv --system-site-packages --relocatable ./python && \
+  uv venv --python /usr/local/bin/python3 --system-site-packages --relocatable ./python && \
   VIRTUAL_ENV=/opt/python uv sync --no-dev --link-mode=copy --active
 
 FROM rocm/dev-ubuntu-24.04:7.2.1-complete
@@ -91,6 +91,7 @@ ENV LC_ALL=en_US.UTF-8
 
 COPY --from=astral/uv:latest /uv /usr/local/bin/uv
 COPY --from=translator_node_builder /usr/local/ /usr/local/
+COPY --from=app_python_builder /usr/local/ /usr/local/
 
 RUN install -d -m 0775 -o ${USER_ID} -g 0 /app /config /downloads && \
   ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime && \
