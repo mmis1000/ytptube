@@ -283,6 +283,15 @@ const AUDIO_EXTS = new Set([
   ".ogg",
   ".opus",
   ".aac",
+  ".mp4",
+  ".mkv",
+  ".webm",
+  ".mov",
+  ".m4v",
+  ".avi",
+  ".ts",
+  ".m2ts",
+  ".flv",
 ]);
 
 async function discoverAudioTracks(inputDir: string): Promise<AudioTrack[]> {
@@ -351,14 +360,14 @@ async function main() {
     }
   }
 
-  // ── Step 1: Discover audio tracks ────────────────────────────────────────
+  // ── Step 1: Discover media tracks ────────────────────────────────────────
 
   const tracks = await discoverAudioTracks(config.inputDir);
   if (tracks.length === 0) {
-    console.error("No audio files found in input directory.");
+    console.error("No supported media files found in input directory.");
     process.exit(1);
   }
-  console.log(`Found ${tracks.length} audio track(s)`);
+  console.log(`Found ${tracks.length} media track(s)`);
 
   // ── Step 2: Resolve metadata ─────────────────────────────────────────────
 

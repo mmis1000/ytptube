@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import shutil
+from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -229,6 +230,7 @@ class TranslatorService(metaclass=Singleton):
 
         log_path = workspace / "translator.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        recent_lines: deque[str] = deque(maxlen=20)
 
         async def consume(stream: asyncio.StreamReader | None, label: str) -> None:
             if stream is None:
@@ -239,16 +241,23 @@ class TranslatorService(metaclass=Singleton):
                     if not line:
                         break
                     text = line.decode("utf-8", errors="ignore").rstrip()
-                    handle.write(f"[{label}] {text}\n")
+                    tagged = f"[{label}] {text}"
+                    handle.write(f"{tagged}\n")
                     handle.flush()
+                    recent_lines.append(tagged)
                     if self._is_interesting_line(text):
                         await self._apply_progress_line(item, text, log_path)
 
         await asyncio.gather(consume(process.stdout, "stdout"), consume(process.stderr, "stderr"))
         code = await process.wait()
         if code != 0:
-            message = f"translator exited with code {code}"
-            raise RuntimeError(message)
+            raise RuntimeError(self._format_translator_failure(code=code, log_path=log_path, recent_lines=recent_lines))
+
+    def _format_translator_failure(self, *, code: int, log_path: Path, recent_lines: deque[str]) -> str:
+        message = f"translator exited with code {code}; log: {log_path}"
+        if recent_lines:
+            return f"{message}; last output:\n" + "\n".join(recent_lines)
+        return message
 
     async def _prepare_workspace(
         self,

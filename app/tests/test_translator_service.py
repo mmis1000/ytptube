@@ -1,3 +1,4 @@
+from collections import deque
 from pathlib import Path
 
 from app.features.translator.service import TranslatorService
@@ -47,3 +48,32 @@ def test_existing_translate_sidecars_require_translation_files(tmp_path: Path) -
     (tmp_path / "sample.windows.json").write_text("[]")
 
     assert service._has_existing_sidecars(media_file, "translate") is True
+
+
+def test_format_translator_failure_includes_log_path_and_recent_lines(tmp_path: Path) -> None:
+    service = TranslatorService.get_instance()
+    log_path = tmp_path / "translator.log"
+
+    message = service._format_translator_failure(
+        code=1,
+        log_path=log_path,
+        recent_lines=deque(["[stderr] boom", "[stdout] detail"], maxlen=20),
+    )
+
+    assert "translator exited with code 1" in message
+    assert str(log_path) in message
+    assert "[stderr] boom" in message
+    assert "[stdout] detail" in message
+
+
+def test_format_translator_failure_without_recent_lines_still_points_to_log(tmp_path: Path) -> None:
+    service = TranslatorService.get_instance()
+    log_path = tmp_path / "translator.log"
+
+    message = service._format_translator_failure(
+        code=1,
+        log_path=log_path,
+        recent_lines=deque([], maxlen=20),
+    )
+
+    assert message == f"translator exited with code 1; log: {log_path}"
