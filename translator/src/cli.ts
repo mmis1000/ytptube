@@ -716,6 +716,7 @@ async function main() {
     llamaServerExe: config.llamaServerExe,
     modelPath: config.modelPath,
     hfRepo: config.hfRepo,
+    hfFile: config.hfFile,
     serverPort: config.serverPort,
     gpuLayers: config.gpuLayers,
     contextSize: config.contextSize,
