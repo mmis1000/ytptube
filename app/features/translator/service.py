@@ -236,22 +236,54 @@ class TranslatorService(metaclass=Singleton):
             if stream is None:
                 return
             with log_path.open("a", encoding="utf-8") as handle:
-                while True:
-                    line = await stream.readline()
-                    if not line:
-                        break
-                    text = line.decode("utf-8", errors="ignore").rstrip()
-                    tagged = f"[{label}] {text}"
-                    handle.write(f"{tagged}\n")
-                    handle.flush()
-                    recent_lines.append(tagged)
-                    if self._is_interesting_line(text):
-                        await self._apply_progress_line(item, text, log_path)
+                async for text in self._iter_stream_records(stream):
+                    await self._record_stream_line(
+                        handle=handle,
+                        recent_lines=recent_lines,
+                        item=item,
+                        text=text,
+                        label=label,
+                        log_path=log_path,
+                    )
 
         await asyncio.gather(consume(process.stdout, "stdout"), consume(process.stderr, "stderr"))
         code = await process.wait()
         if code != 0:
             raise RuntimeError(self._format_translator_failure(code=code, log_path=log_path, recent_lines=recent_lines))
+
+    async def _iter_stream_records(self, stream: asyncio.StreamReader, chunk_size: int = 4096):
+        pending = ""
+        while True:
+            chunk = await stream.read(chunk_size)
+            if not chunk:
+                break
+            pending += chunk.decode("utf-8", errors="ignore")
+            parts = re.split(r"[\r\n]+", pending)
+            pending = parts.pop() if parts else ""
+            for part in parts:
+                text = part.strip()
+                if text:
+                    yield text
+        tail = pending.strip()
+        if tail:
+            yield tail
+
+    async def _record_stream_line(
+        self,
+        *,
+        handle,
+        recent_lines: deque[str],
+        item: Download,
+        text: str,
+        label: str,
+        log_path: Path,
+    ) -> None:
+        tagged = f"[{label}] {text}"
+        handle.write(f"{tagged}\n")
+        handle.flush()
+        recent_lines.append(tagged)
+        if self._is_interesting_line(text):
+            await self._apply_progress_line(item, text, log_path)
 
     def _format_translator_failure(self, *, code: int, log_path: Path, recent_lines: deque[str]) -> str:
         message = f"translator exited with code {code}; log: {log_path}"

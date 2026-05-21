@@ -13,6 +13,26 @@ interface DemucsResult {
   windows: DemucsWindow[];
 }
 
+function createProgressSafeWriter(destination: NodeJS.WriteStream) {
+  let pending = "";
+  return {
+    write(chunk: Buffer | string) {
+      pending += chunk.toString();
+      const parts = pending.split(/\r|\n/);
+      pending = parts.pop() ?? "";
+      for (const part of parts) {
+        const text = part.trim();
+        if (text) destination.write(`${text}\n`);
+      }
+    },
+    flush() {
+      const text = pending.trim();
+      if (text) destination.write(`${text}\n`);
+      pending = "";
+    },
+  };
+}
+
 /**
  * Generic runner for Python CLI tools with sentinel-based termination.
  * Used for both ASR (Whisper) and Demucs separation.
@@ -29,6 +49,8 @@ function runPythonCommand(
     console.log(`  [${label}] Running ${path.basename(scriptPath)}`);
 
     const child: ChildProcess = spawn(pythonExe, ["-u", scriptPath, ...args]);
+    const stdoutWriter = createProgressSafeWriter(process.stdout);
+    const stderrWriter = createProgressSafeWriter(process.stderr);
 
     const timeout = setTimeout(() => {
       child.kill("SIGKILL");
@@ -42,7 +64,7 @@ function runPythonCommand(
 
     child.stdout?.on("data", (data: Buffer) => {
       const chunk = data.toString();
-      process.stdout.write(chunk);
+      stdoutWriter.write(chunk);
       stdoutBuf += chunk;
       if (!done && stdoutBuf.includes(sentinel)) {
         done = true;
@@ -51,9 +73,11 @@ function runPythonCommand(
       }
     });
 
-    child.stderr?.on("data", (data: Buffer) => process.stderr.write(data));
+    child.stderr?.on("data", (data: Buffer) => stderrWriter.write(data));
 
     child.on("close", (code: number | null) => {
+      stdoutWriter.flush();
+      stderrWriter.flush();
       if (done) { resolve(); return; }
       reject(new Error(`${label} process exited with code ${code}`));
     });

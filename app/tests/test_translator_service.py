@@ -1,3 +1,4 @@
+import asyncio
 from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
@@ -78,6 +79,34 @@ def test_format_translator_failure_without_recent_lines_still_points_to_log(tmp_
     )
 
     assert message == f"translator exited with code 1; log: {log_path}"
+
+
+async def _collect_stream_records(chunks: list[bytes]) -> list[str]:
+    service = TranslatorService.get_instance()
+    reader = asyncio.StreamReader()
+    for chunk in chunks:
+        reader.feed_data(chunk)
+    reader.feed_eof()
+    return [text async for text in service._iter_stream_records(reader)]
+
+
+def test_iter_stream_records_handles_carriage_returns_and_long_chunks() -> None:
+    records = asyncio.run(
+        _collect_stream_records(
+            [
+                b"progress 1/3\rprogress 2/3\r",
+                b"progress 3/3\nfinal line without newline",
+            ]
+        )
+    )
+
+    assert records == ["progress 1/3", "progress 2/3", "progress 3/3", "final line without newline"]
+
+
+def test_iter_stream_records_reassembles_split_lines() -> None:
+    records = asyncio.run(_collect_stream_records([b"hello", b" world\nnext", b" line\rthird"]))
+
+    assert records == ["hello world", "next line", "third"]
 
 
 def test_build_command_prefers_built_dist_cli_when_available(tmp_path: Path) -> None:
