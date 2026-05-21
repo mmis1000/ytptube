@@ -2,6 +2,7 @@ import asyncio
 from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from app.features.translator.service import TranslatorService
 
@@ -193,3 +194,166 @@ def test_build_command_falls_back_to_npm_start_without_built_dist(tmp_path: Path
     assert cmd[:4] == ["npm-custom", "run", "start", "--"]
     assert "--hf-file" in cmd
     assert cmd[cmd.index("--hf-file") + 1] == "example-q8_0.gguf"
+
+
+async def _collect_progress_update(line: str) -> dict:
+    service = TranslatorService.get_instance()
+    update_item = AsyncMock()
+    service._update_item = update_item  # type: ignore[method-assign]
+    item = SimpleNamespace(info=SimpleNamespace(extras={}))
+
+    await service._apply_progress_line(item, line, Path("/tmp/translator.log"))
+
+    return update_item.await_args.kwargs["progress_update"]
+
+
+def test_apply_progress_line_tracks_translate_phase_progress() -> None:
+    update = asyncio.run(_collect_progress_update("[Translate 2/5] episode01"))
+
+    assert update["phase"] == "translate"
+    assert update["progress"] == {
+        "current": 2,
+        "total": 5,
+        "track": "episode01",
+    }
+
+
+def test_apply_progress_line_tracks_window_progress_and_remaining() -> None:
+    update = asyncio.run(_collect_progress_update("[TranslateWindow 3/12] episode01"))
+
+    assert update["phase"] == "translate"
+    assert update["progress"] == {
+        "window_current": 3,
+        "window_total": 12,
+        "window_remaining": 9,
+        "track": "episode01",
+    }
+
+
+def test_apply_progress_line_merges_window_progress_with_existing_track_progress() -> None:
+    service = TranslatorService.get_instance()
+    item = SimpleNamespace(
+        info=SimpleNamespace(
+            extras={
+                "subtitle_generation": {
+                    "progress": {
+                        "current": 2,
+                        "total": 5,
+                        "track": "episode01",
+                    }
+                }
+            }
+        )
+    )
+    update_item = AsyncMock()
+    service._update_item = update_item  # type: ignore[method-assign]
+
+    asyncio.run(service._apply_progress_line(item, "[TranslateWindow 3/12] episode01", Path("/tmp/translator.log")))
+
+    update = update_item.await_args.kwargs["progress_update"]
+    assert update["progress"] == {
+        "current": 2,
+        "total": 5,
+        "track": "episode01",
+        "window_current": 3,
+        "window_total": 12,
+        "window_remaining": 9,
+    }
+
+
+def test_apply_progress_line_preserves_existing_window_progress_on_non_progress_line() -> None:
+    service = TranslatorService.get_instance()
+    item = SimpleNamespace(
+        info=SimpleNamespace(
+            extras={
+                "subtitle_generation": {
+                    "progress": {
+                        "current": 2,
+                        "total": 5,
+                        "track": "episode01",
+                        "window_current": 3,
+                        "window_total": 12,
+                        "window_remaining": 9,
+                    }
+                }
+            }
+        )
+    )
+    update_item = AsyncMock()
+    service._update_item = update_item  # type: ignore[method-assign]
+
+    asyncio.run(service._apply_progress_line(item, "Done: 18 translated entries", Path("/tmp/translator.log")))
+
+    update = update_item.await_args.kwargs["progress_update"]
+    assert update["progress"] == {
+        "current": 2,
+        "total": 5,
+        "track": "episode01",
+        "window_current": 3,
+        "window_total": 12,
+        "window_remaining": 9,
+    }
+    assert update["last_line"] == "Done: 18 translated entries"
+
+
+def test_apply_progress_line_clears_window_progress_for_new_translate_track() -> None:
+    service = TranslatorService.get_instance()
+    item = SimpleNamespace(
+        info=SimpleNamespace(
+            extras={
+                "subtitle_generation": {
+                    "progress": {
+                        "current": 2,
+                        "total": 5,
+                        "track": "episode01",
+                        "window_current": 12,
+                        "window_total": 12,
+                        "window_remaining": 0,
+                    }
+                }
+            }
+        )
+    )
+    update_item = AsyncMock()
+    service._update_item = update_item  # type: ignore[method-assign]
+
+    asyncio.run(service._apply_progress_line(item, "[Translate 3/5] episode02", Path("/tmp/translator.log")))
+
+    update = update_item.await_args.kwargs["progress_update"]
+    assert update["progress"] == {
+        "current": 3,
+        "total": 5,
+        "track": "episode02",
+    }
+
+
+def test_apply_progress_line_clears_window_progress_for_non_translate_phase() -> None:
+    service = TranslatorService.get_instance()
+    item = SimpleNamespace(
+        info=SimpleNamespace(
+            extras={
+                "subtitle_generation": {
+                    "progress": {
+                        "current": 2,
+                        "total": 5,
+                        "track": "episode01",
+                        "window_current": 3,
+                        "window_total": 12,
+                        "window_remaining": 9,
+                    }
+                }
+            }
+        )
+    )
+    update_item = AsyncMock()
+    service._update_item = update_item  # type: ignore[method-assign]
+
+    asyncio.run(service._apply_progress_line(item, "[Subtitle 2/5] episode01", Path("/tmp/translator.log")))
+
+    update = update_item.await_args.kwargs["progress_update"]
+    assert update["phase"] == "subtitle"
+    assert update["progress"] == {
+        "current": 2,
+        "total": 5,
+        "track": "episode01",
+    }

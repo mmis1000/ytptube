@@ -270,6 +270,20 @@
                   >
                     {{ item.msg }}
                   </p>
+
+                  <div
+                    v-if="getSubtitleDetailRows(item).length > 0"
+                    class="mt-2 flex flex-wrap gap-2 text-xs text-toned"
+                  >
+                    <span
+                      v-for="detail in getSubtitleDetailRows(item)"
+                      :key="`${item._id}-${detail.label}`"
+                      class="rounded-md border border-default bg-muted/20 px-2 py-1"
+                    >
+                      <span class="font-semibold text-default">{{ detail.label }}:</span>
+                      {{ detail.value }}
+                    </span>
+                  </div>
                 </td>
 
                 <td class="border-r border-default/60 px-3 py-3 text-center align-top text-sm">
@@ -587,7 +601,7 @@
             </div>
 
             <div
-              v-if="item.error || showMessage(item)"
+              v-if="item.error || showMessage(item) || getSubtitleDetailRows(item).length > 0"
               class="space-y-2 border-t border-default pt-3"
             >
               <p
@@ -605,6 +619,20 @@
               >
                 {{ item.msg }}
               </p>
+
+              <div
+                v-if="getSubtitleDetailRows(item).length > 0"
+                class="flex flex-wrap gap-2 text-xs text-toned"
+              >
+                <span
+                  v-for="detail in getSubtitleDetailRows(item)"
+                  :key="`${item._id}-${detail.label}-card`"
+                  class="rounded-md border border-default bg-muted/20 px-2 py-1"
+                >
+                  <span class="font-semibold text-default">{{ detail.label }}:</span>
+                  {{ detail.value }}
+                </span>
+              </div>
             </div>
 
             <template #footer>
@@ -1213,6 +1241,89 @@ const clearIncomplete = async (): Promise<void> => {
 
 const getSubtitleGeneration = (item: StoreItem) => item.extras?.subtitle_generation;
 
+const hasNumericValue = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+const getSubtitleTrackProgressText = (item: StoreItem): string | null => {
+  const progress = getSubtitleGeneration(item)?.progress;
+  if (!hasNumericValue(progress?.current) || !hasNumericValue(progress?.total)) {
+    return null;
+  }
+
+  return `Track ${progress.current}/${progress.total}`;
+};
+
+const getSubtitleChunkProgressText = (item: StoreItem): string | null => {
+  const progress = getSubtitleGeneration(item)?.progress;
+  if (!hasNumericValue(progress?.window_current) || !hasNumericValue(progress?.window_total)) {
+    return null;
+  }
+
+  return `Chunk ${progress.window_current}/${progress.window_total}`;
+};
+
+const getSubtitleRemainingText = (item: StoreItem): string | null => {
+  const remaining = getSubtitleGeneration(item)?.progress?.window_remaining;
+  if (!hasNumericValue(remaining)) {
+    return null;
+  }
+
+  return `${remaining} left`;
+};
+
+const getSubtitleTrackLabel = (item: StoreItem): string | null => {
+  return getSubtitleGeneration(item)?.progress?.track ?? null;
+};
+
+const getSubtitleProgressParts = (item: StoreItem): Array<string> => {
+  const subtitle = getSubtitleGeneration(item);
+  const phase = subtitle?.phase ? subtitle.phase.charAt(0).toUpperCase() + subtitle.phase.slice(1) : null;
+  const progressParts = [
+    getSubtitleTrackProgressText(item),
+    getSubtitleChunkProgressText(item),
+    getSubtitleRemainingText(item),
+  ].filter((value): value is string => Boolean(value));
+
+  return phase ? [phase, ...progressParts] : progressParts;
+};
+
+const getSubtitleDetailRows = (item: StoreItem): Array<{ label: string; value: string }> => {
+  const subtitle = getSubtitleGeneration(item);
+  if (!subtitle?.state || (subtitle.state !== 'running' && subtitle.state !== 'queued' && subtitle.state !== 'error')) {
+    return [];
+  }
+
+  const rows: Array<{ label: string; value: string }> = [];
+  if (subtitle.phase) {
+    rows.push({ label: 'Phase', value: subtitle.phase });
+  }
+
+  const trackLabel = getSubtitleTrackLabel(item);
+  if (trackLabel) {
+    rows.push({ label: 'Track', value: trackLabel });
+  }
+
+  const trackProgress = getSubtitleTrackProgressText(item);
+  if (trackProgress) {
+    rows.push({ label: 'Tracks', value: trackProgress.replace(/^Track\s/, '') });
+  }
+
+  const chunkProgress = getSubtitleChunkProgressText(item);
+  if (chunkProgress) {
+    rows.push({ label: 'Chunks', value: chunkProgress.replace(/^Chunk\s/, '') });
+  }
+
+  const remaining = getSubtitleRemainingText(item);
+  if (remaining) {
+    rows.push({ label: 'Remaining', value: remaining });
+  }
+
+  if (subtitle.last_line && subtitle.last_line !== subtitle.message) {
+    rows.push({ label: 'Last update', value: subtitle.last_line });
+  }
+
+  return rows;
+};
+
 const getSubtitleStatus = (item: StoreItem): string | null => {
   const subtitle = getSubtitleGeneration(item);
   if (!subtitle?.state) {
@@ -1220,12 +1331,12 @@ const getSubtitleStatus = (item: StoreItem): string | null => {
   }
 
   if (subtitle.state === "running") {
-    const current = subtitle.progress?.current;
-    const total = subtitle.progress?.total;
-    const phase = subtitle.phase ? ` (${subtitle.phase})` : "";
-    if (current && total) {
-      return `Subtitle ${current}/${total}${phase}`;
+    const progressParts = getSubtitleProgressParts(item);
+    if (progressParts.length > 0) {
+      return progressParts.join(' · ');
     }
+
+    const phase = subtitle.phase ? ` (${subtitle.phase})` : "";
     return `Generating subtitles${phase}`;
   }
 

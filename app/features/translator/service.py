@@ -35,6 +35,7 @@ LOG: logging.Logger = logging.getLogger("translator.service")
 
 _SERVER_NOISE_RE = re.compile(r"^\d{2}\.\d{2}\.\d{3}")
 _PHASE_RE = re.compile(r"^\[(ASR|Translate|Subtitle)\s+(\d+)/(\d+)\]\s+(.+)$")
+_WINDOW_RE = re.compile(r"^\[TranslateWindow\s+(\d+)/(\d+)\]\s+(.+)$")
 
 
 class TranslatorService(metaclass=Singleton):
@@ -431,18 +432,45 @@ class TranslatorService(metaclass=Singleton):
         return cmd
 
     async def _apply_progress_line(self, item: Download, line: str, log_path: Path) -> None:
+        existing_progress = (
+            dict((item.info.extras.get("subtitle_generation") or {}).get("progress") or {})
+            if getattr(item, "info", None) is not None
+            else {}
+        )
         update: dict[str, Any] = {
             "last_line": line,
             "log_file": str(log_path),
         }
+        progress = dict(existing_progress)
         if match := _PHASE_RE.match(line):
             phase_name, current, total, track = match.groups()
-            update["phase"] = phase_name.lower()
-            update["progress"] = {
-                "current": int(current),
-                "total": int(total),
-                "track": track,
-            }
+            phase = phase_name.lower()
+            previous_track = progress.get("track")
+            update["phase"] = phase
+            progress.update(
+                {
+                    "current": int(current),
+                    "total": int(total),
+                    "track": track,
+                }
+            )
+            if phase != "translate" or previous_track != track:
+                progress.pop("window_current", None)
+                progress.pop("window_total", None)
+                progress.pop("window_remaining", None)
+        elif match := _WINDOW_RE.match(line):
+            current, total, track = match.groups()
+            current_int = int(current)
+            total_int = int(total)
+            update["phase"] = "translate"
+            progress.update(
+                {
+                    "track": track,
+                    "window_current": current_int,
+                    "window_total": total_int,
+                    "window_remaining": max(total_int - current_int, 0),
+                }
+            )
         elif line.startswith("[Metadata]"):
             update["phase"] = "metadata"
         elif line.startswith("[TranslateServer]"):
@@ -451,6 +479,9 @@ class TranslatorService(metaclass=Singleton):
             update["phase"] = "complete"
         elif line.startswith("Found "):
             update["phase"] = "discover"
+
+        if progress:
+            update["progress"] = progress
 
         await self._update_item(item, state="running", message=line, progress_update=update)
 
@@ -603,6 +634,7 @@ class TranslatorService(metaclass=Singleton):
             "[Metadata]",
             "[ASR ",
             "[Translate ",
+            "[TranslateWindow ",
             "[Subtitle ",
             "[TranslateServer]",
             "Found ",

@@ -120,6 +120,9 @@ type StoreItem = {
         current?: number;
         total?: number;
         track?: string;
+        window_current?: number;
+        window_total?: number;
+        window_remaining?: number;
       };
     };
   };

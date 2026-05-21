@@ -239,6 +239,7 @@ export async function translateTrack(
 
   for (let wi = 0; wi < windows.length; wi++) {
     const win = windows[wi]!;
+    console.log(`  [TranslateWindow ${wi + 1}/${windows.length}] ${trackName}`);
     const grammar = generateTranslationGrammar(win.segments, config.mode);
 
     let parsed: TranslationEntry[] | null = null;
