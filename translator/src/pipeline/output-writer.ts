@@ -9,6 +9,16 @@ async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
 }
 
+function windowResultsPath(outputDir: string, relativeDir: string, stem: string): string {
+  return path.join(outputDir, relativeDir, `${stem}.windows.json`);
+}
+
+async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
+  const tempPath = `${filePath}.tmp`;
+  await fs.writeFile(tempPath, JSON.stringify(value, null, 2), "utf-8");
+  await fs.rename(tempPath, filePath);
+}
+
 /** Write the cleaned transcription for a single track. */
 export async function writeTranscription(
   outputDir: string,
@@ -87,6 +97,35 @@ export async function writeTranslation(
   ]);
 }
 
+export async function readWindowResults(
+  outputDir: string,
+  relativeDir: string,
+  stem: string,
+): Promise<WindowResult[]> {
+  const filePath = windowResultsPath(outputDir, relativeDir, stem);
+  try {
+    const raw = await fs.readFile(filePath, "utf-8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as WindowResult[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function checkpointWindowResult(
+  outputDir: string,
+  relativeDir: string,
+  stem: string,
+  windowResult: WindowResult,
+): Promise<void> {
+  const dir = path.join(outputDir, relativeDir);
+  await ensureDir(dir);
+  const existing = await readWindowResults(outputDir, relativeDir, stem);
+  const merged = [...existing.filter((entry) => entry.index !== windowResult.index), windowResult]
+    .sort((left, right) => left.index - right.index);
+  await writeJsonAtomic(windowResultsPath(outputDir, relativeDir, stem), merged);
+}
+
 /** Write per-window LLM intermediates for debugging (raw output + parsed entries). */
 export async function writeWindowResults(
   outputDir: string,
@@ -96,11 +135,7 @@ export async function writeWindowResults(
 ): Promise<void> {
   const dir = path.join(outputDir, relativeDir);
   await ensureDir(dir);
-  await fs.writeFile(
-    path.join(dir, `${stem}.windows.json`),
-    JSON.stringify(windowResults, null, 2),
-    "utf-8",
-  );
+  await writeJsonAtomic(windowResultsPath(outputDir, relativeDir, stem), windowResults);
 }
 
 /** Write metadata.json at the output root. */

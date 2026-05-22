@@ -23,9 +23,11 @@ import {
   writeTranscriptSubtitles,
   writeTranslation, 
   writeMetadata, 
-  writeWindowResults, 
+  writeWindowResults,
+  checkpointWindowResult,
   writeSurgicalLog, 
   readSurgicalLog,
+  readWindowResults,
 } from "./pipeline/output-writer.js";
 import { asrToSegments, translateTrack } from "./pipeline/translator.js";
 import type { AudioTrack, GlossaryLang, UserMetadata, FinalMetadata } from "./util/types.js";
@@ -742,7 +744,13 @@ async function main() {
       const trackName = track.relativePath;
 
       try {
-        const { entries, windowResults } = await translateTrack(segments, glossary, trackName, config, client);
+        const existingWindowResults = await readWindowResults(config.outputDir, track.relativeDir, track.stem);
+        const { entries, windowResults } = await translateTrack(segments, glossary, trackName, config, client, {
+          resumeWindowResults: existingWindowResults,
+          onWindowComplete: async (windowResult) => {
+            await checkpointWindowResult(config.outputDir, track.relativeDir, track.stem, windowResult);
+          },
+        });
 
         await writeWindowResults(config.outputDir, track.relativeDir, track.stem, windowResults);
 

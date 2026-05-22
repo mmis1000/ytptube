@@ -357,3 +357,67 @@ def test_apply_progress_line_clears_window_progress_for_non_translate_phase() ->
         "total": 5,
         "track": "episode01",
     }
+
+
+async def _collect_stale_reconcile_update(subtitle_generation: dict, active_job: bool = False) -> dict | None:
+    service = TranslatorService.get_instance()
+    update_item = AsyncMock()
+    service._update_item = update_item  # type: ignore[method-assign]
+    item = SimpleNamespace(info=SimpleNamespace(extras={"subtitle_generation": subtitle_generation}))
+    service._jobs = {"item-1": asyncio.create_task(asyncio.sleep(60))} if active_job else {}
+
+    try:
+        reconciled = await service._reconcile_stale_job_state("item-1", item)
+    finally:
+        for task in service._jobs.values():
+            task.cancel()
+        service._jobs = {}
+
+    if not reconciled:
+        return None
+    return update_item.await_args.kwargs
+
+
+def test_reconcile_stale_job_state_marks_orphaned_running_job_for_retry() -> None:
+    kwargs = asyncio.run(
+        _collect_stale_reconcile_update(
+            {
+                "state": "running",
+                "message": "[TranslateWindow 28/41] track01",
+                "workspace": "/tmp/translator/item-1",
+            }
+        )
+    )
+
+    assert kwargs is not None
+    assert kwargs["state"] == "queued"
+    assert "stale subtitle job" in kwargs["message"].lower()
+    assert kwargs["progress_update"]["resumed_from_stale_state"] is True
+    assert kwargs["progress_update"]["previous_state"] == "running"
+
+
+def test_reconcile_stale_job_state_ignores_active_runtime_job() -> None:
+    kwargs = asyncio.run(
+        _collect_stale_reconcile_update(
+            {
+                "state": "running",
+                "message": "[TranslateWindow 28/41] track01",
+            },
+            active_job=True,
+        )
+    )
+
+    assert kwargs is None
+
+
+def test_reconcile_stale_job_state_ignores_finished_state() -> None:
+    kwargs = asyncio.run(
+        _collect_stale_reconcile_update(
+            {
+                "state": "finished",
+                "message": "Subtitle generation completed.",
+            }
+        )
+    )
+
+    assert kwargs is None

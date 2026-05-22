@@ -154,6 +154,8 @@ class TranslatorService(metaclass=Singleton):
                 "files": copied,
             }
 
+        await self._reconcile_stale_job_state(item_id, item)
+
         payload = {
             "source": source,
             "force": force,
@@ -560,6 +562,27 @@ class TranslatorService(metaclass=Singleton):
         if not item:
             return
         await self._update_item(item, state="error", message=message)
+
+    async def _reconcile_stale_job_state(self, item_id: str, item: Download) -> bool:
+        active_job = self._jobs.get(item_id)
+        if active_job is not None and not active_job.done():
+            return False
+
+        subtitle_generation = dict(item.info.extras.get("subtitle_generation") or {})
+        previous_state = str(subtitle_generation.get("state") or "")
+        if previous_state not in {"queued", "running"}:
+            return False
+
+        await self._update_item(
+            item,
+            state="queued",
+            message="Detected stale subtitle job from previous app restart; retrying.",
+            progress_update={
+                "resumed_from_stale_state": True,
+                "previous_state": previous_state,
+            },
+        )
+        return True
 
     async def _update_item(
         self,

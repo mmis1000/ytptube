@@ -114,6 +114,47 @@ export interface WindowResult {
   error?: string | undefined;
 }
 
+export interface ResumeCheckpoint {
+  entries: TranslationEntry[];
+  windowResults: WindowResult[];
+  /** Zero-based index of the next window that still needs work. */
+  nextWindowIndex: number;
+}
+
+export interface TranslateTrackOptions {
+  resumeWindowResults?: WindowResult[] | undefined;
+  onWindowComplete?: ((windowResult: WindowResult, allWindowResults: WindowResult[]) => Promise<void> | void) | undefined;
+}
+
+export function getResumeCheckpoint(
+  windowResults: WindowResult[],
+  expectedSegmentCounts?: number[] | undefined,
+): ResumeCheckpoint {
+  const contiguous: WindowResult[] = [];
+  const entries: TranslationEntry[] = [];
+
+  for (const windowResult of [...windowResults].sort((left, right) => left.index - right.index)) {
+    const expectedIndex = contiguous.length + 1;
+    if (windowResult.index !== expectedIndex || windowResult.parsed === null) {
+      break;
+    }
+    if (
+      expectedSegmentCounts !== undefined
+      && windowResult.segmentCount !== expectedSegmentCounts[windowResult.index - 1]
+    ) {
+      break;
+    }
+    contiguous.push(windowResult);
+    entries.push(...windowResult.parsed);
+  }
+
+  return {
+    entries,
+    windowResults: contiguous,
+    nextWindowIndex: contiguous.length,
+  };
+}
+
 /**
  * Convert cleaned ASR segments into the flat Segment[] format used by prompts.
  * Timestamps are converted from seconds to milliseconds.
@@ -217,6 +258,7 @@ export async function translateTrack(
   trackName: string,
   config: TranslatorConfig,
   client: LlmClient,
+  options: TranslateTrackOptions = {},
 ): Promise<{ entries: TranslationEntry[]; windowResults: WindowResult[] }> {
   const promptBuilder = getPromptBuilder(config.locale, config.mode);
 
@@ -234,10 +276,20 @@ export async function translateTrack(
 
   console.log(`  [translate] ${windows.length} window(s) for "${trackName}"`);
 
-  const allEntries: TranslationEntry[] = [];
-  const windowResults: WindowResult[] = [];
+  const resumeCheckpoint = getResumeCheckpoint(
+    options.resumeWindowResults ?? [],
+    windows.map((window) => window.segments.length),
+  );
+  if (resumeCheckpoint.windowResults.length > 0) {
+    console.log(
+      `  [translate] Resuming from window ${resumeCheckpoint.nextWindowIndex + 1}/${windows.length} for "${trackName}"`,
+    );
+  }
 
-  for (let wi = 0; wi < windows.length; wi++) {
+  const allEntries: TranslationEntry[] = [...resumeCheckpoint.entries];
+  const windowResults: WindowResult[] = [...resumeCheckpoint.windowResults];
+
+  for (let wi = resumeCheckpoint.nextWindowIndex; wi < windows.length; wi++) {
     const win = windows[wi]!;
     console.log(`  [TranslateWindow ${wi + 1}/${windows.length}] ${trackName}`);
     const grammar = generateTranslationGrammar(win.segments, config.mode);
@@ -377,6 +429,7 @@ export async function translateTrack(
     }
 
     windowResults.push(winResult);
+    await options.onWindowComplete?.(winResult, [...windowResults]);
   }
 
   return { entries: stripSpeakerPrefixes(allEntries), windowResults };
