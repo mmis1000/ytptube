@@ -1121,6 +1121,12 @@ const itemActionGroups = (item: StoreItem): Array<Array<Record<string, unknown>>
     });
 
     mediaActions.push({
+      label: "Re-translate subtitles",
+      icon: "i-lucide-rotate-cw",
+      onSelect: () => void generateSubtitles(item, true),
+    });
+
+    mediaActions.push({
       label: "Generate NFO",
       icon: "i-lucide-file-code-2",
       onSelect: () => void generateNfo(item),
@@ -1783,12 +1789,15 @@ const isQueuedAnimation = (item: StoreItem): string => {
   return item.live_in || item.extras?.live_in || item.extras?.release_in ? 'animate-spin' : '';
 };
 
-const generateSubtitles = async (item: StoreItem): Promise<void> => {
+const generateSubtitles = async (item: StoreItem, force = false): Promise<void> => {
+  if (force && !await box.confirm('Re-translate subtitles? Existing transcription will be reused when available. Current subtitles will be replaced after success.')) {
+    return;
+  }
   try {
     toast.info("Subtitle generation requested...", { timeout: 2000 });
     const response = await request(`/api/history/${item._id}/subtitle`, {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify(force ? { force: true, subtitle_mode: "translate" } : {}),
     });
     const data = await response.json();
 

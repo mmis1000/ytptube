@@ -316,6 +316,12 @@ class TranslatorService(metaclass=Singleton):
         except OSError:
             shutil.copy2(media_file, link_path)
 
+        if payload.get("force"):
+            # Restart translation while retaining expensive ASR/repair caches.
+            # Published sidecars stay available until the replacement succeeds.
+            for suffix in (".windows.json", ".translation.json", ".lrc", ".vtt"):
+                (output_dir / f"{media_file.stem}{suffix}").unlink(missing_ok=True)
+
         metadata_override = payload.get("metadata_file")
         if metadata_override:
             return input_dir, output_dir, Path(str(metadata_override))

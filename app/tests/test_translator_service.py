@@ -2,9 +2,37 @@ import asyncio
 from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from app.features.translator.service import TranslatorService
+
+
+def test_force_retranslation_resets_only_translation_cache(tmp_path: Path) -> None:
+    service = TranslatorService.get_instance()
+    media = tmp_path / "sample.opus"
+    media.write_text("audio")
+    published = tmp_path / "sample.vtt"
+    published.write_text("old subtitles")
+    workspace = tmp_path / "workspace"
+    output = workspace / "output"
+    output.mkdir(parents=True)
+    reset = ("windows.json", "translation.json", "lrc", "vtt")
+    retained = ("transcription.json", "raw-transcription.json", "surgical.json", "demucs.json")
+    for suffix in (*reset, *retained):
+        (output / f"sample.{suffix}").write_text("cached")
+    other = output / "other.windows.json"
+    other.write_text("other")
+    payload = {"metadata_file": str(tmp_path / "metadata.json"), "force": False}
+    asyncio.run(service._prepare_workspace(Mock(), media, workspace, payload))
+    assert all((output / f"sample.{suffix}").exists() for suffix in reset)
+    payload["force"] = True
+    asyncio.run(service._prepare_workspace(Mock(), media, workspace, payload))
+    assert all(not (output / f"sample.{suffix}").exists() for suffix in reset)
+    assert all((output / f"sample.{suffix}").read_text() == "cached" for suffix in retained)
+    assert other.read_text() == "other"
+    assert published.read_text() == "old subtitles"
+    # A second forced request is safe even with no translation cache left.
+    asyncio.run(service._prepare_workspace(Mock(), media, workspace, payload))
 
 
 def test_translate_recovery_requires_translation_outputs(tmp_path: Path) -> None:
