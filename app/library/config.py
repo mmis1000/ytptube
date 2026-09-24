@@ -251,7 +251,7 @@ class Config(metaclass=Singleton):
     """Local GGUF model used by the translator when no server URL is configured."""
 
     translator_hf_repo: str = ""
-    """Optional HuggingFace repo used instead of a local translator model path."""
+    """Optional HuggingFace repo override. When empty, locale/mode selects the matching v0.2 Q8 repo."""
 
     translator_hf_file: str = ""
     """Optional exact GGUF filename within translator_hf_repo passed to llama.cpp --hf-file."""

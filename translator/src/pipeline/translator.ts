@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { TranslatorConfig } from "../config.js";
 import type { LlmClient } from "../server/llm-client.js";
 import { buildChatPrompt, extractJsonArray } from "../server/llm-client.js";
@@ -80,7 +81,30 @@ const CHARS_PER_TOKEN_EST = 2.0;
  */
 const MAX_GEN_TO_PROMPT_RATIO = 3.5;
 
-const TRAINING_CONTEXT_TOKENS = 4096;
+const TRAINING_CONTEXT_TOKENS = 8192;
+const TRANSLATION_PROMPT_CONTRACT = "asmr-qwen3.5-v0.2-native8k-prompt-glossary-v1";
+
+export function getTranslationContractId(config: TranslatorConfig): string {
+  const modelSource = config.serverUrl
+    ? { type: "server", value: config.serverUrl }
+    : config.hfRepo
+      ? { type: "huggingface", value: config.hfRepo, file: config.hfFile ?? null }
+      : { type: "local", value: config.modelPath };
+  const contract = JSON.stringify({
+    prompt: TRANSLATION_PROMPT_CONTRACT,
+    locale: config.locale,
+    mode: config.mode,
+    modelSource,
+    contextSize: config.contextSize,
+    temperature: config.temperature,
+    topP: config.topP,
+    topK: config.topK,
+    minP: config.minP,
+    repeatPenalty: config.repeatPenalty,
+    seed: config.seed ?? null,
+  });
+  return `${TRANSLATION_PROMPT_CONTRACT}:${createHash("sha256").update(contract).digest("hex")}`;
+}
 
 function estimatePromptTokens(prompt: string): number {
   return Math.max(1, Math.ceil(prompt.length / CHARS_PER_TOKEN_EST));
@@ -101,6 +125,8 @@ function computeNPredict(
 }
 
 export interface WindowResult {
+  /** Model, prompt/schema, and decoding identity required for safe resume. */
+  contractId: string;
   /** 1-based window index */
   index: number;
   segmentCount: number;
@@ -129,13 +155,19 @@ export interface TranslateTrackOptions {
 export function getResumeCheckpoint(
   windowResults: WindowResult[],
   expectedSegmentCounts?: number[] | undefined,
+  expectedContractId?: string | undefined,
 ): ResumeCheckpoint {
   const contiguous: WindowResult[] = [];
   const entries: TranslationEntry[] = [];
 
   for (const windowResult of [...windowResults].sort((left, right) => left.index - right.index)) {
     const expectedIndex = contiguous.length + 1;
-    if (windowResult.index !== expectedIndex || windowResult.parsed === null) {
+    if (
+      windowResult.index !== expectedIndex
+      || windowResult.parsed === null
+      || expectedContractId === undefined
+      || windowResult.contractId !== expectedContractId
+    ) {
       break;
     }
     if (
@@ -261,6 +293,7 @@ export async function translateTrack(
   options: TranslateTrackOptions = {},
 ): Promise<{ entries: TranslationEntry[]; windowResults: WindowResult[] }> {
   const promptBuilder = getPromptBuilder(config.locale, config.mode);
+  const contractId = getTranslationContractId(config);
 
   const windowCharBudget = config.mode === "echo" ? MAX_CHARS_ECHO : MAX_CHARS_BASE;
   const windows = makeInferenceWindows(segments, (segs) => {
@@ -279,6 +312,7 @@ export async function translateTrack(
   const resumeCheckpoint = getResumeCheckpoint(
     options.resumeWindowResults ?? [],
     windows.map((window) => window.segments.length),
+    contractId,
   );
   if (resumeCheckpoint.windowResults.length > 0) {
     console.log(
@@ -383,10 +417,11 @@ export async function translateTrack(
                   text: m.text,
                   start: m.start,
                   end: m.end,
-                } as TranslationEntry & { input?: string };
-                
+                } as TranslationEntry;
+
                 if (config.mode === "echo") {
                   entry.input = m.text;
+                  entry.glossary = {};
                 }
                 collected.push(entry);
               }
@@ -413,6 +448,7 @@ export async function translateTrack(
     }
 
     const winResult: WindowResult = {
+      contractId,
       index: wi + 1,
       segmentCount: win.segments.length,
       attempts,

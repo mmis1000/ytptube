@@ -10,23 +10,21 @@ All models are fine-tuned from **Qwen3.5-9B** via LoRA on a curated ASMR subtitl
 
 | Model | Language | Mode | HuggingFace |
 |-------|----------|------|-------------|
-| asmr-qwen3.5-9b-zh-tw-echo-gguf-v0.1 | Traditional Chinese | Echo | [mmis1000/asmr-qwen3.5-9b-zh-tw-echo-gguf-v0.1](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-tw-echo-gguf-v0.1) |
-| asmr-qwen3.5-9b-zh-cn-echo-gguf-v0.1 | Simplified Chinese | Echo | [mmis1000/asmr-qwen3.5-9b-zh-cn-echo-gguf-v0.1](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-cn-echo-gguf-v0.1) |
-| asmr-qwen3.5-9b-zh-tw-gguf-v0.1 | Traditional Chinese | Base | [mmis1000/asmr-qwen3.5-9b-zh-tw-gguf-v0.1](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-tw-gguf-v0.1) |
-| asmr-qwen3.5-9b-zh-cn-gguf-v0.1 | Simplified Chinese | Base | [mmis1000/asmr-qwen3.5-9b-zh-cn-gguf-v0.1](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-cn-gguf-v0.1) |
-| asmr-qwen3.5-9b-zh-tw-echo-mtp-gguf-v0.1 | Traditional Chinese | Echo + MTP | [mmis1000/asmr-qwen3.5-9b-zh-tw-echo-mtp-gguf-v0.1](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-tw-echo-mtp-gguf-v0.1) |
-| asmr-qwen3.5-9b-zh-cn-echo-mtp-gguf-v0.1 | Simplified Chinese | Echo + MTP | [mmis1000/asmr-qwen3.5-9b-zh-cn-echo-mtp-gguf-v0.1](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-cn-echo-mtp-gguf-v0.1) |
-| asmr-qwen3.5-9b-zh-tw-mtp-gguf-v0.1 | Traditional Chinese | Base + MTP | [mmis1000/asmr-qwen3.5-9b-zh-tw-mtp-gguf-v0.1](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-tw-mtp-gguf-v0.1) |
-| asmr-qwen3.5-9b-zh-cn-mtp-gguf-v0.1 | Simplified Chinese | Base + MTP | [mmis1000/asmr-qwen3.5-9b-zh-cn-mtp-gguf-v0.1](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-cn-mtp-gguf-v0.1) |
+| asmr-qwen3.5-9b-zh-tw-echo-gguf-v0.2 | Traditional Chinese | Echo | [mmis1000/asmr-qwen3.5-9b-zh-tw-echo-gguf-v0.2](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-tw-echo-gguf-v0.2) |
+| asmr-qwen3.5-9b-zh-cn-echo-gguf-v0.2 | Simplified Chinese | Echo | [mmis1000/asmr-qwen3.5-9b-zh-cn-echo-gguf-v0.2](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-cn-echo-gguf-v0.2) |
+| asmr-qwen3.5-9b-zh-tw-gguf-v0.2 | Traditional Chinese | Base | [mmis1000/asmr-qwen3.5-9b-zh-tw-gguf-v0.2](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-tw-gguf-v0.2) |
+| asmr-qwen3.5-9b-zh-cn-gguf-v0.2 | Simplified Chinese | Base | [mmis1000/asmr-qwen3.5-9b-zh-cn-gguf-v0.2](https://huggingface.co/mmis1000/asmr-qwen3.5-9b-zh-cn-gguf-v0.2) |
+
+The v0.2 family is continued natively to a total context of 8,192 tokens. Keep output headroom and use shorter windows for noisy or repetitive ASR; long-context `zh-cn` echo use is experimental because held-out testing found cross-window contamination on one noisy concatenated sample.
 
 ### Echo mode vs Base mode
 
 The models come in two translation modes. Use `--mode echo` or `--mode base` to select.
 
-**Echo mode (recommended)** — the model "echoes" the source Japanese in an `"input"` field alongside each translated entry:
+**Echo mode (recommended)** — the model echoes the source Japanese in an `"input"` field and records the per-entry terminology it used in `"glossary"`:
 
 ```json
-{"ids": [1, 2], "input": "ねぇ、放課後、 一緒に帰らない?", "text": "欸，放學後，要不要一起回去？", "start": 3000, "end": 7000}
+{"ids": [1, 2], "input": "ねぇ、放課後、 一緒に帰らない?", "glossary": {"放課後": "放學後"}, "text": "欸，放學後，要不要一起回去？", "start": 3000, "end": 7000}
 ```
 
 **Base mode** — traditional output with translation only:
@@ -39,14 +37,14 @@ The models come in two translation modes. Use `--mode echo` or `--mode base` to 
 |---|---|---|
 | **Hallucination resistance** | Strong — echoing the source anchors cross-attention and significantly reduces fabricated or omitted segments | Weaker — more prone to hallucinations and skipped segments on noisy ASR input |
 | **Translation accuracy** | Higher — the model attends to its own echoed source, keeping translations faithful | Good for clean input, but can drift when ASR is imperfect |
-| **Auditability** | `input` field lets you verify what the model actually "saw" for each segment | No source visibility in output |
+| **Auditability** | `input` and `glossary` show the source span and applied terminology for each entry | No source visibility in output |
 | **Output size** | Larger — every entry includes the full source text, roughly 1.5–2x more tokens | Smaller and faster to generate |
 | **Inference speed** | Slower due to longer output sequences | Faster |
 | **Best for** | Production use, noisy/real-world audio, quality-critical workflows | Quick previews, clean studio audio, bandwidth-constrained environments |
 
 ### Quantization guide
 
-Each model is published with four quantization levels. Use the `:<quant>` suffix with `--hf-repo`. MTP-capable variants use the same quant suffixes, but you should also pass `--mtp` at runtime so llama.cpp enables `draft-mtp` mode:
+Each model is published with four quantization levels. Use the `:<quant>` suffix with `--hf-repo`. The native-8k v0.2 repositories are non-MTP; do not pass `--mtp` for these models.
 
 | Quantization | Suffix | Quality | VRAM (approx) | Use case |
 |---|---|---|---|---|
@@ -104,8 +102,7 @@ For a complete run using Qwen for echo translation into Traditional Chinese form
 npm run start -- `
   --input "<dir>" `
   --output "<dir>" `
-  --hf-repo "mmis1000/asmr-qwen3.5-9b-zh-tw-echo-mtp-gguf-v0.1:Q8_0" `
-  --mtp `
+  --hf-repo "mmis1000/asmr-qwen3.5-9b-zh-tw-echo-gguf-v0.2:Q8_0" `
   --meta-hf-repo "unsloth/Qwen3.5-9B-GGUF:UD-Q6_K_XL" `
   --dlsite "RJxxxxxx" `
   --llama-server "<path-to-llama-server.exe>" `
@@ -123,8 +120,7 @@ For Simplified Chinese output, use the `zh-cn` language flag and the correspondi
 npm run start -- `
   --input "<dir>" `
   --output "<dir>" `
-  --hf-repo "mmis1000/asmr-qwen3.5-9b-zh-cn-echo-mtp-gguf-v0.1:Q8_0" `
-  --mtp `
+  --hf-repo "mmis1000/asmr-qwen3.5-9b-zh-cn-echo-gguf-v0.2:Q8_0" `
   --meta-hf-repo "unsloth/Qwen3.5-9B-GGUF:UD-Q6_K_XL" `
   --dlsite "RJxxxxxx" `
   --llama-server "<path-to-llama-server.exe>" `
@@ -142,8 +138,7 @@ Use when audio comes from a URL supported by yt-dlp. Ensure `uv` is on `PATH` an
 npm run start -- `
   --input "<download-dir>" `
   --output "<out-dir>" `
-  --hf-repo "mmis1000/asmr-qwen3.5-9b-zh-tw-echo-mtp-gguf-v0.1:Q8_0" `
-  --mtp `
+  --hf-repo "mmis1000/asmr-qwen3.5-9b-zh-tw-echo-gguf-v0.2:Q8_0" `
   --meta-hf-repo "unsloth/Qwen3.5-9B-GGUF:UD-Q6_K_XL" `
   --ytdlp "https://www.youtube.com/watch?v=VIDEO_ID" `
   --llama-server "<path-to-llama-server.exe>" `
@@ -182,8 +177,7 @@ Whether using an empty generic file or a manually filled one, run the translator
 npm run start -- `
   --input "<dir>" `
   --output "<dir>" `
-  --hf-repo "mmis1000/asmr-qwen3.5-9b-zh-tw-echo-mtp-gguf-v0.1:Q8_0" `
-  --mtp `
+  --hf-repo "mmis1000/asmr-qwen3.5-9b-zh-tw-echo-gguf-v0.2:Q8_0" `
   --metadata "generic-meta.json" `
   --llama-server "<path-to-llama-server.exe>" `
   --asr python `

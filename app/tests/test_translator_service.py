@@ -196,6 +196,53 @@ def test_build_command_falls_back_to_npm_start_without_built_dist(tmp_path: Path
     assert cmd[cmd.index("--hf-file") + 1] == "example-q8_0.gguf"
 
 
+def test_build_command_selects_matching_v02_repo_when_model_is_unconfigured(tmp_path: Path) -> None:
+    service = TranslatorService.get_instance()
+    project_path = tmp_path / "translator-project"
+    project_path.mkdir()
+    previous_config = service._config
+    service._config = SimpleNamespace(  # type: ignore[assignment]
+        translator_project_path=str(project_path),
+        translator_npm_exe="npm",
+        translator_node_exe="node",
+        translator_locale="zh-tw",
+        translator_mode="echo",
+        translator_asr_mode="python",
+        translator_server_url="",
+        translator_hf_repo="",
+        translator_hf_file="",
+        translator_model_path="",
+        translator_llama_server_exe="llama-server",
+        translator_port=8181,
+        translator_gpu_layers="all",
+        translator_ctx_size=8192,
+        translator_parallel=1,
+        translator_mtp=False,
+        translator_spec_draft_n_max=2,
+        translator_python_exe="",
+        translator_asr_script="",
+        translator_uv_exe="uv",
+    )
+    expected = {
+        ("zh-tw", "echo"): "mmis1000/asmr-qwen3.5-9b-zh-tw-echo-gguf-v0.2:Q8_0",
+        ("zh-tw", "base"): "mmis1000/asmr-qwen3.5-9b-zh-tw-gguf-v0.2:Q8_0",
+        ("zh-cn", "echo"): "mmis1000/asmr-qwen3.5-9b-zh-cn-echo-gguf-v0.2:Q8_0",
+        ("zh-cn", "base"): "mmis1000/asmr-qwen3.5-9b-zh-cn-gguf-v0.2:Q8_0",
+    }
+    try:
+        for (lang, mode), repo in expected.items():
+            cmd = service._build_command(
+                input_dir=tmp_path / "input",
+                output_dir=tmp_path / "output",
+                payload={"lang": lang, "mode": mode},
+                metadata_path=tmp_path / "metadata.json",
+            )
+            assert cmd[cmd.index("--hf-repo") + 1] == repo
+            assert "--mtp" not in cmd
+    finally:
+        service._config = previous_config
+
+
 async def _collect_progress_update(line: str) -> dict:
     service = TranslatorService.get_instance()
     update_item = AsyncMock()

@@ -14,7 +14,7 @@ export function buildPromptZhTw(
   return `將以下日語ASMR逐字稿翻譯成繁體中文。
 
 音軌：${trackName}
-場景說明：${summary}
+作品背景：${summary}
 
 術語表（請嚴格使用zh欄位的譯名）：
 ${glossaryJson}
@@ -23,6 +23,7 @@ ${glossaryJson}
 - 重複片語（連續3次以上且無變化）：僅保留一次
 - 錯字／同音異字：依上下文修正
 - 字幕版權行（字幕：／翻訳：／QQ／LINE水印）：text設為null
+- 無意義噪音片段（孤立氣息、Whisper殘留碎片、極短無語義片段）：text設為null
 - 錯誤專有名詞：依術語表修正
 
 翻譯規則：
@@ -37,6 +38,7 @@ ${glossaryJson}
 {"ids": [<n>, ...], "text": "<繁體中文>", "start": <最早ms>, "end": <最晚ms>}
 
 字幕版權行：{"ids": [<n>], "text": null, "start": <ms>, "end": <ms>}
+無意義片段：{"ids": [<n>], "text": null, "start": <ms>, "end": <ms>}
 每個輸入id必須恰好出現在一個輸出項中。
 
 逐字稿：
@@ -52,7 +54,7 @@ export function buildPromptZhCn(
   return `将以下日语ASMR逐字稿翻译成简体中文。
 
 音轨：${trackName}
-场景说明：${summary}
+作品背景：${summary}
 
 术语表（请严格使用zh栏位的译名）：
 ${glossaryJson}
@@ -61,6 +63,7 @@ ${glossaryJson}
 - 重复片语（连续3次以上且无变化）：仅保留一次
 - 错字／同音异字：依上下文修正
 - 字幕版权行（字幕：／翻訳：／QQ／LINE水印）：text设为null
+- 无意义噪音片段（孤立气息、Whisper残留碎片、极短无语义片段）：text设为null
 - 错误专有名词：依术语表修正
 
 翻译规则：
@@ -75,6 +78,7 @@ ${glossaryJson}
 {"ids": [<n>, ...], "text": "<简体中文>", "start": <最早ms>, "end": <最晚ms>}
 
 字幕版权行：{"ids": [<n>], "text": null, "start": <ms>, "end": <ms>}
+无意义片段：{"ids": [<n>], "text": null, "start": <ms>, "end": <ms>}
 每个输入id必须恰好出现在一个输出项中。
 
 逐字稿：
@@ -92,7 +96,7 @@ export function buildPromptEchoZhTw(
   return `將以下日語ASMR逐字稿翻譯成繁體中文。
 
 音軌：${trackName}
-場景說明：${summary}
+作品背景：${summary}
 
 術語表（請嚴格使用zh欄位的譯名）：
 ${glossaryJson}
@@ -101,6 +105,7 @@ ${glossaryJson}
 - 重複片語（連續3次以上且無變化）：僅保留一次
 - 錯字／同音異字：依上下文修正
 - 字幕版權行（字幕：／翻訳：／QQ／LINE水印）：text設為null
+- 無意義噪音片段（孤立氣息、Whisper殘留碎片、極短無語義片段）：text設為null
 - 錯誤專有名詞：依術語表修正
 
 翻譯規則：
@@ -112,11 +117,12 @@ ${glossaryJson}
 輸入：逐字稿JSON陣列 — {"id": <n>, "text": "<日文>", "start": <ms>, "end": <ms>}
 
 輸出：將連續構成同一句話的片段合併，JSON陣列格式：
-{"ids": [<n>, ...], "input": "<合併後的原始日文，以空格連接>", "text": "<繁體中文>", "start": <最早ms>, "end": <最晚ms>}
+{"ids": [<n>, ...], "input": "<合併後的原始日文，以空格連接>", "glossary": {"<日文術語>": "<中文譯名>", ...}, "text": "<繁體中文>", "start": <最早ms>, "end": <最晚ms>}
 
-字幕版權行：{"ids": [<n>], "input": "<原始日文>", "text": null, "start": <ms>, "end": <ms>}
+字幕版權行：{"ids": [<n>], "input": "<原始日文>", "glossary": {}, "text": null, "start": <ms>, "end": <ms>}
+無意義片段：{"ids": [<n>], "input": "<原始日文>", "glossary": {}, "text": null, "start": <ms>, "end": <ms>}
 每個輸入id必須恰好出現在一個輸出項中。
-input欄位為ids所對應的原始日文片段以空格連接，text為其繁體中文翻譯。
+input欄位為ids所對應的原始日文片段以空格連接，glossary為該句中使用的術語表對照，text為其繁體中文翻譯。
 
 逐字稿：
 ${transcriptionJson}`;
@@ -131,7 +137,7 @@ export function buildPromptEchoZhCn(
   return `将以下日语ASMR逐字稿翻译成简体中文。
 
 音轨：${trackName}
-场景说明：${summary}
+作品背景：${summary}
 
 术语表（请严格使用zh栏位的译名）：
 ${glossaryJson}
@@ -140,6 +146,7 @@ ${glossaryJson}
 - 重复片语（连续3次以上且无变化）：仅保留一次
 - 错字／同音异字：依上下文修正
 - 字幕版权行（字幕：／翻訳：／QQ／LINE水印）：text设为null
+- 无意义噪音片段（孤立气息、Whisper残留碎片、极短无语义片段）：text设为null
 - 错误专有名词：依术语表修正
 
 翻译规则：
@@ -151,11 +158,12 @@ ${glossaryJson}
 输入：逐字稿JSON数组 — {"id": <n>, "text": "<日文>", "start": <ms>, "end": <ms>}
 
 输出：将连续构成同一句话的片段合并，JSON数组格式：
-{"ids": [<n>, ...], "input": "<合并后的原始日文，以空格连接>", "text": "<简体中文>", "start": <最早ms>, "end": <最晚ms>}
+{"ids": [<n>, ...], "input": "<合并后的原始日文，以空格连接>", "glossary": {"<日文术语>": "<中文译名>", ...}, "text": "<简体中文>", "start": <最早ms>, "end": <最晚ms>}
 
-字幕版权行：{"ids": [<n>], "input": "<原始日文>", "text": null, "start": <ms>, "end": <ms>}
+字幕版权行：{"ids": [<n>], "input": "<原始日文>", "glossary": {}, "text": null, "start": <ms>, "end": <ms>}
+无意义片段：{"ids": [<n>], "input": "<原始日文>", "glossary": {}, "text": null, "start": <ms>, "end": <ms>}
 每个输入id必须恰好出现在一个输出项中。
-input字段为ids所对应的原始日文片段以空格连接，text为其简体中文翻译。
+input字段为ids所对应的原始日文片段以空格连接，glossary为该句中使用的术语表对照，text为其简体中文翻译。
 
 逐字稿：
 ${transcriptionJson}`;

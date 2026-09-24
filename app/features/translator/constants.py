@@ -16,6 +16,22 @@ VALID_SUBTITLE_MODES: tuple[str, ...] = (
     SUBTITLE_MODE_TRANSLATE,
 )
 
+DEFAULT_TRANSLATOR_HF_REPOS: dict[tuple[str, str], str] = {
+    ("zh-tw", "echo"): "mmis1000/asmr-qwen3.5-9b-zh-tw-echo-gguf-v0.2:Q8_0",
+    ("zh-tw", "base"): "mmis1000/asmr-qwen3.5-9b-zh-tw-gguf-v0.2:Q8_0",
+    ("zh-cn", "echo"): "mmis1000/asmr-qwen3.5-9b-zh-cn-echo-gguf-v0.2:Q8_0",
+    ("zh-cn", "base"): "mmis1000/asmr-qwen3.5-9b-zh-cn-gguf-v0.2:Q8_0",
+}
+
+
+def default_translator_hf_repo(locale: object, mode: object) -> str:
+    key = (str(locale).strip().lower(), str(mode).strip().lower())
+    try:
+        return DEFAULT_TRANSLATOR_HF_REPOS[key]
+    except KeyError as exc:
+        msg = f"No default translator model for locale={key[0]!r}, mode={key[1]!r}"
+        raise ValueError(msg) from exc
+
 
 def normalize_download_mode(value: object, default: str = DOWNLOAD_MODE_DOWNLOAD) -> str:
     if value is None:

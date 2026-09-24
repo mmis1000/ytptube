@@ -16,6 +16,7 @@ from app.features.translator.constants import (
     DOWNLOAD_MODE_DOWNLOAD,
     SUBTITLE_MODE_NONE,
     SUBTITLE_MODE_TRANSLATE,
+    default_translator_hf_repo,
     normalize_download_mode,
     normalize_subtitle_mode,
     should_generate_subtitles,
@@ -399,11 +400,15 @@ class TranslatorService(metaclass=Singleton):
         elif subtitle_mode != "transcribe" and config.translator_model_path:
             cmd.extend(["--model", config.translator_model_path])
         elif subtitle_mode != "transcribe":
-            message = (
-                "translator model/server is not configured. Set YTP_TRANSLATOR_SERVER_URL "
-                "or YTP_TRANSLATOR_MODEL_PATH."
+            cmd.extend(
+                [
+                    "--hf-repo",
+                    default_translator_hf_repo(
+                        payload.get("lang") or config.translator_locale,
+                        payload.get("mode") or config.translator_mode,
+                    ),
+                ]
             )
-            raise ValueError(message)
 
         if subtitle_mode != "transcribe" and not config.translator_server_url:
             cmd.extend(

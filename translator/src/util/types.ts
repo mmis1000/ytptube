@@ -57,10 +57,13 @@ export interface TranslationEntry {
   text: string | null;
   start: number;  // ms
   end: number;    // ms
+  input?: string;
+  glossary?: Record<string, string>;
 }
 
 export interface TranslationEchoEntry extends TranslationEntry {
   input: string;
+  glossary: Record<string, string>;
 }
 
 // ── Glossary / metadata types ────────────────────────────────────────────────

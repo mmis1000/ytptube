@@ -4,18 +4,15 @@ import { formatTranscriptionJson } from "./prompt-builder.js";
 // Character-budget windowing: grow each window until the estimated total
 // character count (fixed prompt overhead + transcription JSON) exceeds maxChars.
 //
-// The training pipeline (instruct-dataset-pipeline.ts) uses MAX_CHARS=5000 for the
-// COMBINED input+output budget per window (~3500 tokens at ~1.4 chars/token).
-// At inference we only count input here. The fine-tune target is total seq len 4096
-// (prompt + completion), so budgets here stay conservative even if llama-server
-// uses n_ctx=8192.
+// v0.2 continues the models at a native total sequence length of 8192 tokens.
+// These are intentionally input-side character budgets, not attempts to fill n_ctx.
+// Held-out validation showed that concatenating noisy/repetitive source windows near
+// 8k can amplify repetition and cross-window contamination, especially in zh-cn echo.
+// Keep the established shorter windows and let translator.ts reserve generation room;
+// retries can sub-chunk further when collapse or malformed output is detected.
 //
-// Base: ~1.6 chars/token → rough input-side budget; completion stays under the 4096
-// training cap via translator.ts maxNPredict.
-//
-// Echo: real runs often land ~2–2.3k tokens total (prompt + completion) vs 4096 train
-// length — under-filled. Use a **larger** char budget than base so each window carries
-// more segments and moves closer to the training distribution (fewer HTTP round-trips).
+// Echo uses a larger budget than base because its source-echo output is typically
+// better anchored, while still staying well below the total runtime context limit.
 export const MAX_CHARS_BASE = 2500;
 export const MAX_CHARS_ECHO = 3500;
 const MIN_WINDOW = 3;

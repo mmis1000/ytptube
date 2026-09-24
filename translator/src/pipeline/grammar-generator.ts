@@ -39,7 +39,8 @@ export function generateTranslationGrammar(
   let gbnf = 'root ::= "[" ws s1 ws "]"\n\n';
   gbnf += 'text-value ::= "null" | any-string\n';
   gbnf +=
-    'any-string ::= "\\"" ([^"\\\\\\x7F\\x00-\\x1F] | "\\\\" (["\\\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]))* "\\""\n';
+    'any-string ::= "\\\"" ([^"\\\\\\x7F\\x00-\\x1F] | "\\\\" (["\\\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]))* "\\\""\n';
+  gbnf += 'glossary ::= "{" ws (any-string ws ":" ws any-string (ws "," ws any-string ws ":" ws any-string)*)? ws "}"\n';
   gbnf += "ws ::= [ \\t\\n\\r]*\n\n";
 
   for (let i = 0; i < n; i++) {
@@ -62,6 +63,7 @@ export function generateTranslationGrammar(
 
       const keyIds = wsToken('"ids"');
       const keyInput = wsToken('"input"');
+      const keyGlossary = wsToken('"glossary"');
       const keyText = wsToken('"text"');
       const keyStart = wsToken('"start"');
       const keyEnd = wsToken('"end"');
@@ -79,6 +81,7 @@ export function generateTranslationGrammar(
         const inputLit = gStr(JSON.stringify(inputText));
         entry = `( ${gStr("{")} ws ${keyIds} ${colon} ${idsGbnf} ws ` +
                 `${comma} ${keyInput} ${colon} ${inputLit} ws ` +
+                `${comma} ${keyGlossary} ${colon} glossary ws ` +
                 `${comma} ${keyText} ${colon} text-value ws ` +
                 `${comma} ${keyStart} ${colon} ${gStr(start.toString())} ws ` +
                 `${comma} ${keyEnd} ${colon} ${gStr(end.toString())} ws ${gStr("}")} )`;
